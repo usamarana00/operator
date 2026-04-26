@@ -1,7 +1,11 @@
 import asyncio
 import json
 import os
+import sys
 import uuid
+
+# Ensure backend/ is on the path when run via `uvicorn backend.main:app`
+sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
