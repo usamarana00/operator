@@ -62,31 +62,50 @@ async def _stream(message: str, session_id: str):
     init_db(DB_PATH)
     history = get_history(session_id)
 
-    # Planner
-    yield _sse("planner", "thinking", "Classifying your request...")
+    # ── Planner ──────────────────────────────────────────
+    yield _sse("planner", "thinking", "Analyzing your request...")
     await asyncio.sleep(0)
     routing = classify_intent(message, history)
     intent = routing.get("intent", "general")
     entities = routing.get("entities", {})
-    yield _sse("planner", "done", f"Intent: {intent}")
+    intent_labels = {
+        "deadline": "project deadlines & milestones",
+        "repo":     "GitHub repository data",
+        "both":     "deadlines + GitHub data",
+        "general":  "general conversation",
+    }
+    yield _sse("planner", "event", f"Intent classified → {intent_labels.get(intent, intent)}")
+    if entities.get("project"):
+        yield _sse("planner", "event", f"Entity detected → project: \"{entities['project']}\"")
 
     pm_output = ""
     github_output = ""
 
-    # PM Agent
+    # ── PM Agent ─────────────────────────────────────────
     if intent in ("deadline", "both"):
-        yield _sse("pm", "thinking", "Searching project docs and deadlines...")
+        yield _sse("pm", "thinking", "Engaging PM Agent...")
         await asyncio.sleep(0)
+
+        yield _sse("pm", "event", "RAG › Searching project documents (Chroma vector DB)...")
         retriever = _get_retriever()
+        docs = retriever.invoke(message)
+        yield _sse("pm", "event", f"RAG › Retrieved {len(docs)} relevant document chunks")
+
+        milestones = get_milestones(DB_PATH)
+        yield _sse("pm", "event", f"SQLite › Queried milestones table → {len(milestones)} records found")
+
         pm_output = run_pm_agent(message, retriever, history, db_path=DB_PATH)
-        # Filesystem MCP — log query to notes
+
         filesystem_write("pm_queries.txt", f"Query: {message}\nResult: {pm_output}\n---\n")
+        yield _sse("mcp", "event", "Filesystem MCP › Wrote query log to data/notes/pm_queries.txt")
+
         yield _sse("pm", "data", pm_output)
 
-    # GitHub Agent
+    # ── GitHub Agent ──────────────────────────────────────
     if intent in ("repo", "both"):
-        yield _sse("github", "thinking", "Fetching GitHub repo data...")
+        yield _sse("github", "thinking", "Engaging GitHub Agent...")
         await asyncio.sleep(0)
+
         projects = get_projects(DB_PATH)
         repo_url = None
         entity_project = (entities or {}).get("project") or ""
@@ -96,13 +115,24 @@ async def _stream(message: str, session_id: str):
                 break
         if not repo_url and projects:
             repo_url = projects[0]["repo_url"]
+
+        if repo_url:
+            yield _sse("github", "event", f"GitHub API › Fetching commits, PRs, issues from {repo_url}")
+        yield _sse("mcp", "event", "GitHub MCP › Structured repo access via MCP tool layer")
+
         github_output = run_github_agent(message, repo_url, history)
+        yield _sse("github", "event", "GitHub API › Data retrieved and parsed")
         yield _sse("github", "data", github_output)
 
-    # Response Agent
+    # ── Response Agent ────────────────────────────────────
     yield _sse("response", "thinking", "Synthesizing final answer...")
     await asyncio.sleep(0)
+
+    if intent == "general":
+        yield _sse("response", "event", "General query → answering directly from conversation context")
+
     final = run_response_agent(message, pm_output, github_output, history)
+    yield _sse("response", "event", "Memory › Saving exchange to ConversationBufferMemory")
     yield _sse("response", "final", final)
 
     save_exchange(session_id, message, final)

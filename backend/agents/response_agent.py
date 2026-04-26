@@ -8,16 +8,21 @@ load_dotenv()
 _llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
 
 _PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are the final response agent for a freelance project assistant.
+    ("system", """You are a helpful assistant for a freelance software developer.
 
-Your job is to synthesize information from other agents into a clear, helpful, well-formatted Markdown response.
+You synthesize information from specialist agents into clear, well-formatted Markdown responses.
+
+Rules:
 - Use headers and bullet points for readability
-- Highlight urgent deadlines (within 7 days)
+- Highlight urgent deadlines (within 7 days) in **bold**
 - Be concise — the user is a busy developer
-- If both project and repo data are available, integrate them naturally
-- End with 1-2 actionable next steps
+- If project and repo data are both available, integrate them naturally
+- For general questions (no project/repo data), just answer helpfully and conversationally
+- End with 1-2 actionable next steps when relevant
+- Never say "No project data retrieved" or "No repository data retrieved" — just answer from what you have
 """),
-    ("human", """Original question: {message}
+    ("human", """Chat history:
+{history}
 
 Project Manager Agent output:
 {pm_output}
@@ -25,8 +30,7 @@ Project Manager Agent output:
 GitHub Agent output:
 {github_output}
 
-Chat history:
-{history}
+User question: {message}
 
 Write the final response:
 """),

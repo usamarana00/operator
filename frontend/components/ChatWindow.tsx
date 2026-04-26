@@ -63,7 +63,7 @@ export default function ChatWindow() {
           onKeyDown={handleKeyDown}
           placeholder="Ask about deadlines, repos, or project status... (Enter to send)"
           rows={2}
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           disabled={isStreaming}
         />
         <button
