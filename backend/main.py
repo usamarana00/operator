@@ -124,11 +124,18 @@ async def _stream(message: str, session_id: str):
 
         projects = get_projects(DB_PATH)
         repo_url = None
-        entity_project = (entities or {}).get("project") or ""
-        for p in projects:
-            if entity_project and entity_project.lower() in p["name"].lower():
-                repo_url = p["repo_url"]
-                break
+        # Combine project + repo entity into one search term
+        entity_project = (entities or {}).get("project") or (entities or {}).get("repo") or ""
+        if entity_project:
+            term = entity_project.lower()
+            for p in projects:
+                name_match = term in p["name"].lower()
+                # also match against repo URL slug ("paki-portal" -> "paki portal")
+                url_slug = p["repo_url"].rstrip("/").split("/")[-1].replace("-", " ").lower()
+                slug_match = term in url_slug or any(w in url_slug for w in term.split())
+                if name_match or slug_match:
+                    repo_url = p["repo_url"]
+                    break
         if not repo_url and projects:
             repo_url = projects[0]["repo_url"]
 
