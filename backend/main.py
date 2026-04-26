@@ -1,11 +1,19 @@
 import asyncio
 import json
+import logging
 import os
 import sys
 import uuid
 
 # Ensure backend/ is on the path when run via `uvicorn backend.main:app`
 sys.path.insert(0, os.path.dirname(__file__))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("freelance_agent")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,6 +69,9 @@ def _sse(agent: str, event_type: str, content: str) -> str:
 async def _stream(message: str, session_id: str):
     init_db(DB_PATH)
     history = get_history(session_id)
+    logger.info("── NEW REQUEST [session=%s] ──────────────────────", session_id[:8])
+    logger.info("User: %s", message)
+    logger.info("History length: %d messages", len(history))
 
     # ── Planner ──────────────────────────────────────────
     yield _sse("planner", "thinking", "Analyzing your request...")
@@ -74,6 +85,7 @@ async def _stream(message: str, session_id: str):
         "both":     "deadlines + GitHub data",
         "general":  "general conversation",
     }
+    logger.info("[Planner] intent=%s entities=%s", intent, entities)
     yield _sse("planner", "event", f"Intent classified → {intent_labels.get(intent, intent)}")
     if entities.get("project"):
         yield _sse("planner", "event", f"Entity detected → project: \"{entities['project']}\"")
@@ -89,14 +101,18 @@ async def _stream(message: str, session_id: str):
         yield _sse("pm", "event", "RAG › Searching project documents (Chroma vector DB)...")
         retriever = _get_retriever()
         docs = retriever.invoke(message)
+        logger.info("[PM Agent] RAG retrieved %d chunks", len(docs))
         yield _sse("pm", "event", f"RAG › Retrieved {len(docs)} relevant document chunks")
 
         milestones = get_milestones(DB_PATH)
+        logger.info("[PM Agent] SQLite milestones=%d", len(milestones))
         yield _sse("pm", "event", f"SQLite › Queried milestones table → {len(milestones)} records found")
 
         pm_output = run_pm_agent(message, retriever, history, db_path=DB_PATH)
+        logger.info("[PM Agent] output length=%d chars", len(pm_output))
 
         filesystem_write("pm_queries.txt", f"Query: {message}\nResult: {pm_output}\n---\n")
+        logger.info("[MCP Filesystem] wrote pm_queries.txt")
         yield _sse("mcp", "event", "Filesystem MCP › Wrote query log to data/notes/pm_queries.txt")
 
         yield _sse("pm", "data", pm_output)
@@ -116,11 +132,13 @@ async def _stream(message: str, session_id: str):
         if not repo_url and projects:
             repo_url = projects[0]["repo_url"]
 
+        logger.info("[GitHub Agent] repo_url=%s", repo_url)
         if repo_url:
             yield _sse("github", "event", f"GitHub API › Fetching commits, PRs, issues from {repo_url}")
         yield _sse("mcp", "event", "GitHub MCP › Structured repo access via MCP tool layer")
 
         github_output = run_github_agent(message, repo_url, history)
+        logger.info("[GitHub Agent] output length=%d chars", len(github_output))
         yield _sse("github", "event", "GitHub API › Data retrieved and parsed")
         yield _sse("github", "data", github_output)
 
@@ -132,10 +150,12 @@ async def _stream(message: str, session_id: str):
         yield _sse("response", "event", "General query → answering directly from conversation context")
 
     final = run_response_agent(message, pm_output, github_output, history)
+    logger.info("[Response Agent] final response length=%d chars", len(final))
     yield _sse("response", "event", "Memory › Saving exchange to ConversationBufferMemory")
     yield _sse("response", "final", final)
 
     save_exchange(session_id, message, final)
+    logger.info("── REQUEST COMPLETE ──────────────────────────────")
     yield _sse("system", "done", "")
 
 

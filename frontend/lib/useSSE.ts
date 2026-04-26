@@ -7,12 +7,18 @@ export type AgentEvent = {
   content: string;
 };
 
+export type Turn = {
+  userMessage: string;
+  events: AgentEvent[];
+};
+
 export function useSSE() {
-  const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
   const sendMessage = useCallback(async (message: string, sessionId: string) => {
-    setEvents([]);
+    const turnIndex = turns.length;
+    setTurns((prev) => [...prev, { userMessage: message, events: [] }]);
     setIsStreaming(true);
 
     try {
@@ -44,7 +50,14 @@ export function useSSE() {
             try {
               const event: AgentEvent = JSON.parse(line.slice(6));
               if (event.type !== "done") {
-                setEvents((prev) => [...prev, event]);
+                setTurns((prev) => {
+                  const updated = [...prev];
+                  updated[turnIndex] = {
+                    ...updated[turnIndex],
+                    events: [...updated[turnIndex].events, event],
+                  };
+                  return updated;
+                });
               }
             } catch {
               // skip malformed events
@@ -52,15 +65,22 @@ export function useSSE() {
           }
         }
       }
-    } catch (error) {
-      setEvents((prev) => [
-        ...prev,
-        { agent: "system", type: "error", content: "Connection failed. Is the backend running?" },
-      ]);
+    } catch {
+      setTurns((prev) => {
+        const updated = [...prev];
+        updated[turnIndex] = {
+          ...updated[turnIndex],
+          events: [
+            ...updated[turnIndex].events,
+            { agent: "system", type: "error", content: "Connection failed. Is the backend running?" },
+          ],
+        };
+        return updated;
+      });
     } finally {
       setIsStreaming(false);
     }
-  }, []);
+  }, [turns.length]);
 
-  return { events, isStreaming, sendMessage };
+  return { turns, isStreaming, sendMessage };
 }

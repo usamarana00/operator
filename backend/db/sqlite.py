@@ -48,11 +48,11 @@ def _seed(conn: sqlite3.Connection) -> None:
         return
     conn.execute("""
         INSERT INTO projects (name, client, repo_url, status)
-        VALUES ('Project Alpha', 'Acme Corp', 'https://github.com/usamarana00/Hello-World', 'active')
+        VALUES ('Project Alpha', 'Acme Corp', 'https://github.com/usamarana00/diabetes-health-indicators-ml', 'active')
     """)
     conn.execute("""
         INSERT INTO projects (name, client, repo_url, status)
-        VALUES ('Project Beta', 'Globex Inc', 'https://github.com/usamarana00/Hello-World', 'active')
+        VALUES ('Project Beta', 'Globex Inc', 'https://github.com/usamarana00/paki-portal', 'active')
     """)
     conn.execute("""
         INSERT INTO milestones (project_id, title, due_date, completed)

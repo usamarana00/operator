@@ -6,12 +6,12 @@ import AgentMessage from "./AgentMessage";
 export default function ChatWindow() {
   const [input, setInput] = useState("");
   const [sessionId] = useState(() => crypto.randomUUID());
-  const { events, isStreaming, sendMessage } = useSSE();
+  const { turns, isStreaming, sendMessage } = useSSE();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [events]);
+  }, [turns]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +36,7 @@ export default function ChatWindow() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {events.length === 0 && !isStreaming && (
+        {turns.length === 0 && !isStreaming && (
           <div className="text-center text-gray-400 text-sm mt-20 space-y-2">
             <p className="text-2xl">🤖</p>
             <p className="font-medium text-gray-500">What can I help you with?</p>
@@ -47,9 +47,23 @@ export default function ChatWindow() {
             </div>
           </div>
         )}
-        {events.map((event, i) => (
-          <AgentMessage key={i} agent={event.agent} type={event.type} content={event.content} />
+
+        {turns.map((turn, i) => (
+          <div key={i} className="mb-6">
+            {/* User message bubble */}
+            <div className="flex justify-end mb-3">
+              <div className="bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 text-sm max-w-[75%]">
+                {turn.userMessage}
+              </div>
+            </div>
+
+            {/* Agent events for this turn */}
+            {turn.events.map((event, j) => (
+              <AgentMessage key={j} agent={event.agent} type={event.type} content={event.content} />
+            ))}
+          </div>
         ))}
+
         <div ref={bottomRef} />
       </div>
 
