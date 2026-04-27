@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.sqlite import get_projects, get_milestones, init_db
+from routers.setup import router as setup_router
 from agents.planner import classify_intent
 from agents.project_manager import run_pm_agent
 from agents.github_agent import run_github_agent
@@ -40,6 +41,7 @@ CHROMA_DIR = os.path.join(_BASE, "data", "chroma_db")
 DATA_DIR = os.path.join(_BASE, "data")
 
 app = FastAPI(title="Freelance Agent API")
+app.include_router(setup_router)
 
 app.add_middleware(
     CORSMiddleware,
