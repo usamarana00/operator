@@ -43,29 +43,8 @@ def init_db(path: str = DB_PATH) -> None:
 
 
 def _seed(conn: sqlite3.Connection) -> None:
-    existing = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
-    if existing > 0:
-        return
-    conn.execute("""
-        INSERT INTO projects (name, client, repo_url, status)
-        VALUES ('Project Alpha', 'Acme Corp', 'https://github.com/usamarana00/diabetes-health-indicators-ml', 'active')
-    """)
-    conn.execute("""
-        INSERT INTO projects (name, client, repo_url, status)
-        VALUES ('Project Beta', 'Globex Inc', 'https://github.com/usamarana00/paki-portal', 'active')
-    """)
-    conn.execute("""
-        INSERT INTO milestones (project_id, title, due_date, completed)
-        VALUES (1, 'MVP Launch', '2026-05-01', 0)
-    """)
-    conn.execute("""
-        INSERT INTO milestones (project_id, title, due_date, completed)
-        VALUES (1, 'Design Review', '2026-04-28', 0)
-    """)
-    conn.execute("""
-        INSERT INTO milestones (project_id, title, due_date, completed)
-        VALUES (2, 'API Integration', '2026-05-10', 0)
-    """)
+    # No default seed — run `python backend/setup.py` to configure your projects
+    pass
 
 
 def get_projects(path: str = DB_PATH) -> list[dict[str, Any]]:

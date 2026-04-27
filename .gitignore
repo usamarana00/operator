@@ -8,10 +8,16 @@ venv/
 dist/
 build/
 .pytest_cache/
+
+# User-generated data (populated by setup.py — never commit personal project info)
 backend/data/chroma_db/
 backend/data/memory_chroma/
 backend/data/projects.db
 backend/data/notes/
+backend/data/projects/*.md
+backend/data/clients/*.txt
+backend/data/clients/*.md
+
 node_modules/
 .next/
 *.local
