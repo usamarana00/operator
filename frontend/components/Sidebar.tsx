@@ -1,36 +1,43 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import ProjectCard from "./ProjectCard";
 
 type Milestone = {
-  id: number;
+  id: string;
   title: string;
   due_date: string;
-  completed: number;
-  project_id: number;
+  status: string;
+  project_id: string;
 };
 
 type Project = {
-  id: number;
+  id: string;
   name: string;
   client: string;
   status: string;
 };
 
 export default function Sidebar() {
+  const { data: session } = useSession();
+  const token = (session as any)?.accessToken as string | undefined;
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    fetch("/api/backend/projects")
+    if (!token) return;
+    fetch("/api/backend/projects", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((r) => r.json())
       .then((data) => {
         setProjects(data.projects ?? []);
         setMilestones(data.milestones ?? []);
       })
       .catch(() => setError(true));
-  }, []);
+  }, [token]);
 
   return (
     <aside className="w-64 min-h-screen bg-gray-50 border-r border-gray-200 p-4 flex-shrink-0 overflow-y-auto">

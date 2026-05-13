@@ -1,5 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 
 export type AgentEvent = {
   agent: string;
@@ -13,6 +14,9 @@ export type Turn = {
 };
 
 export function useSSE() {
+  const { data: session } = useSession();
+  const token = (session as any)?.accessToken as string | undefined;
+
   const [turns, setTurns] = useState<Turn[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
@@ -24,7 +28,10 @@ export function useSSE() {
     try {
       const response = await fetch("/api/backend/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ message, session_id: sessionId }),
       });
 
@@ -80,7 +87,7 @@ export function useSSE() {
     } finally {
       setIsStreaming(false);
     }
-  }, [turns.length]);
+  }, [turns.length, token]);
 
   return { turns, isStreaming, sendMessage };
 }

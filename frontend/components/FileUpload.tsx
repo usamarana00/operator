@@ -9,7 +9,7 @@ interface Props {
 
 type UploadState = "idle" | "uploading" | "done" | "error";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const BACKEND = "/api/backend";
 
 export default function FileUpload({ projectId, onUploaded }: Props) {
   const { data: session } = useSession();

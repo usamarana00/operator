@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const BACKEND = "/api/backend";
 
 type Props = {
   token: string;

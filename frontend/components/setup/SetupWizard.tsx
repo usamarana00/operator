@@ -12,7 +12,7 @@ type Props = {
 };
 
 const STEPS = ["Keys", "Repos", "Configure", "Build"];
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const BACKEND = "/api/backend";
 
 export default function SetupWizard({ onComplete }: Props) {
   const { data: session } = useSession();

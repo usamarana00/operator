@@ -260,3 +260,91 @@ pytest tests/ -v
 | 2+ MCP servers | Filesystem MCP + GitHub MCP in `mcp/servers.py` |
 | 2+ external APIs | GitHub REST API + Tavily Search API |
 | 2+ data sources | SQLite (structured) + ChromaDB (vector) + GitHub API (live) |
+
+---
+
+## Deployment
+
+The app runs as three services — all on free tiers.
+
+| Service | What | Where |
+|---------|------|-------|
+| **Vercel** | Next.js frontend | `vercel.com` — connect repo, root = `/` |
+| **Render** | FastAPI backend | `render.com` — auto-detected via `render.yaml` |
+| **Neon** | Postgres + pgvector | `neon.tech` — free tier, permanent |
+| **AWS S3** | File storage | your AWS account, free tier |
+
+### One-time setup checklist
+
+**1. GitHub OAuth app** — `github.com/settings/developers → New OAuth App`
+- Homepage URL: `https://<your-app>.vercel.app`
+- Callback URL: `https://<your-app>.vercel.app/api/auth/callback/github`
+- Copy **Client ID** and **Client Secret**
+
+**2. Neon database**
+```sql
+-- run once in the Neon SQL editor
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+Copy the **pooler connection string** (postgres://...).
+
+**3. AWS S3 bucket**
+- Create bucket `freelance-agent-prod`, block all public access
+- Create IAM user, attach inline policy: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on `arn:aws:s3:::freelance-agent-prod/*`
+- Add CORS rule: allow `PUT` / `GET` from your Vercel domain
+- Copy **Access Key ID** and **Secret Access Key**
+
+**4. Generate secrets**
+```bash
+# NEXTAUTH_SECRET and APP_ENCRYPTION_KEY
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+# APP_ENCRYPTION_KEY must be a valid Fernet key:
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+**5. Render — set env vars** (Settings → Environment)
+```
+NEON_DATABASE_URL      = <pooler URL from Neon>
+NEXTAUTH_SECRET        = <generated above>
+APP_ENCRYPTION_KEY     = <Fernet key from above>
+FRONTEND_ORIGIN        = https://<your-app>.vercel.app
+AWS_ACCESS_KEY_ID      = <from IAM>
+AWS_SECRET_ACCESS_KEY  = <from IAM>
+AWS_REGION             = us-east-1
+AWS_S3_BUCKET          = freelance-agent-prod
+TAVILY_API_KEY         = <optional>
+OPENAI_API_KEY         = <optional fallback>
+```
+
+**6. Vercel — set env vars** (Settings → Environment Variables)
+```
+BACKEND_URL      = https://<your-render-service>.onrender.com
+NEXTAUTH_SECRET  = <same value as Render>
+NEXTAUTH_URL     = https://<your-app>.vercel.app
+GITHUB_ID        = <OAuth app client ID>
+GITHUB_SECRET    = <OAuth app client secret>
+```
+
+**7. Deploy**
+```bash
+# Push to main — Vercel and Render auto-deploy on push
+git push origin main
+```
+
+### Local development (with Docker)
+
+```bash
+# Start Postgres+pgvector and LocalStack S3
+docker compose up -d
+
+# Backend
+cp backend/.env.example backend/.env   # fill in keys
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload
+
+# Frontend
+cp frontend/.env.local.example frontend/.env.local   # fill in keys
+cd frontend && npm install && npm run dev
+```
+
+Open `http://localhost:3000` — sign in with GitHub, complete the wizard, start chatting.
