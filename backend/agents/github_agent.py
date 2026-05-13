@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _llm = ChatOpenAI(model="gpt-4o", temperature=0)
-_GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 _TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 _PROMPT = ChatPromptTemplate.from_messages([
@@ -39,8 +38,8 @@ def _parse_repo(repo_url: str | None) -> tuple[str, str] | None:
     return parts[-2], parts[-1]
 
 
-def _fetch_github_data(owner: str, repo: str) -> str:
-    headers = {"Authorization": f"token {_GITHUB_TOKEN}"} if _GITHUB_TOKEN else {}
+def _fetch_github_data(owner: str, repo: str, github_token: str) -> str:
+    headers = {"Authorization": f"token {github_token}"} if github_token else {}
     base = f"https://api.github.com/repos/{owner}/{repo}"
 
     def get(url: str) -> list:
@@ -89,9 +88,14 @@ def run_github_agent(
     message: str,
     repo_url: str | None,
     history: list[BaseMessage],
+    github_token: str = "",
 ) -> str:
     parsed = _parse_repo(repo_url)
-    github_data = _fetch_github_data(*parsed) if parsed else "No repository URL provided."
+    github_data = (
+        _fetch_github_data(*parsed, github_token=github_token)
+        if parsed
+        else "No repository URL provided."
+    )
     search_results = (
         _tavily_search(message)
         if any(w in message.lower() for w in ("how", "fix", "best", "what is"))

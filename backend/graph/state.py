@@ -6,6 +6,8 @@ import operator
 class AgentState(TypedDict):
     message: str
     session_id: str
+    user_id: str
+    github_token: str
     history: Annotated[list[BaseMessage], operator.add]
     intent: str
     entities: dict

@@ -1,26 +1,23 @@
+import os
 from langchain_openai import OpenAIEmbeddings
-from langchain_chroma import Chroma
-from dotenv import load_dotenv
 
-load_dotenv()
+from db import postgres as db
 
-MEMORY_CHROMA_DIR = "backend/data/memory_chroma"
+_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 
-def _get_store(persist_dir: str = MEMORY_CHROMA_DIR) -> Chroma:
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    return Chroma(persist_directory=persist_dir, embedding_function=embeddings)
-
-
-def save_memory(session_id: str, summary: str, persist_dir: str = MEMORY_CHROMA_DIR) -> None:
-    store = _get_store(persist_dir)
-    store.add_texts(
-        texts=[summary],
-        metadatas=[{"session_id": session_id}],
+async def save_memory(user_id: str, session_id: str, summary: str, project_id: str) -> None:
+    vector = (await _embeddings.aembed_documents([summary]))[0]
+    await db.insert_doc_chunk(
+        user_id=user_id,
+        project_id=project_id,
+        source="memory",
+        content=summary,
+        embedding=vector,
     )
 
 
-def recall_memory(query: str, k: int = 3, persist_dir: str = MEMORY_CHROMA_DIR) -> list[str]:
-    store = _get_store(persist_dir)
-    results = store.similarity_search(query, k=k)
-    return [r.page_content for r in results]
+async def recall_memory(user_id: str, query: str, k: int = 3) -> list[str]:
+    vector = await _embeddings.aembed_query(query)
+    results = await db.similarity_search(user_id=user_id, query_embedding=vector, k=k)
+    return [r["content"] for r in results]

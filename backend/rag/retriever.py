@@ -1,33 +1,41 @@
 import os
 from langchain_openai import OpenAIEmbeddings
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStoreRetriever
-from dotenv import load_dotenv
 
-load_dotenv()
+from db import postgres as db
 
-CHROMA_DIR = "backend/data/chroma_db"
+_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 
-def build_retriever(
+async def index_documents(
+    user_id: str,
+    project_id: str,
     chunks: list[Document],
-    persist_dir: str = CHROMA_DIR,
+    source: str = "readme",
+) -> None:
+    texts = [c.page_content for c in chunks]
+    vectors = await _embeddings.aembed_documents(texts)
+    for text, vector in zip(texts, vectors):
+        await db.insert_doc_chunk(
+            user_id=user_id,
+            project_id=project_id,
+            source=source,
+            content=text,
+            embedding=vector,
+        )
+
+
+async def retrieve(
+    user_id: str,
+    query: str,
     k: int = 4,
-) -> VectorStoreRetriever:
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    vectorstore = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory=persist_dir,
+    project_id: str | None = None,
+) -> list[str]:
+    vector = await _embeddings.aembed_query(query)
+    results = await db.similarity_search(
+        user_id=user_id,
+        query_embedding=vector,
+        k=k,
+        project_id=project_id,
     )
-    return vectorstore.as_retriever(search_kwargs={"k": k})
-
-
-def load_retriever(persist_dir: str = CHROMA_DIR, k: int = 4) -> VectorStoreRetriever:
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    vectorstore = Chroma(
-        persist_directory=persist_dir,
-        embedding_function=embeddings,
-    )
-    return vectorstore.as_retriever(search_kwargs={"k": k})
+    return [r["content"] for r in results]

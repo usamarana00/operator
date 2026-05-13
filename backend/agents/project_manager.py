@@ -1,9 +1,10 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
-from langchain_core.vectorstores import VectorStoreRetriever
-from db.sqlite import get_milestones
 from dotenv import load_dotenv
+
+from db import postgres as db
+from rag.retriever import retrieve
 
 load_dotenv()
 
@@ -33,20 +34,19 @@ User question: {message}
 ])
 
 
-def run_pm_agent(
+async def run_pm_agent(
     message: str,
-    retriever: VectorStoreRetriever,
+    user_id: str,
     history: list[BaseMessage],
-    db_path: str = "backend/data/projects.db",
 ) -> str:
-    docs = retriever.invoke(message)
-    context = "\n\n".join(d.page_content for d in docs)
+    chunks = await retrieve(user_id=user_id, query=message, k=4)
+    context = "\n\n".join(chunks) if chunks else "No project documents indexed yet."
 
-    milestones = get_milestones(db_path)
+    milestones = await db.get_milestones(user_id)
     milestones_str = "\n".join(
-        f"- {m['title']} (due {m['due_date']}, {'done' if m['completed'] else 'pending'})"
+        f"- {m['title']} (due {m['due_date']}, {m['status']})"
         for m in milestones
-    )
+    ) or "No milestones found."
 
     history_str = "\n".join(
         f"{'Human' if m.type == 'human' else 'AI'}: {m.content}" for m in history
