@@ -1,25 +1,26 @@
 import json
-import os
 import re
-import shutil
-from pathlib import Path
+from typing import Any
 
 import requests
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/setup", tags=["setup"])
+from auth import get_user_id, get_github_token, encrypt
+from db import postgres as db
+from rag.loader import load_documents
+from rag.chunker import chunk_documents
+from rag.retriever import index_documents
 
-_BASE = Path(__file__).parent.parent
-DATA_DIR = _BASE / "data"
-PROJECTS_DIR = DATA_DIR / "projects"
-CLIENTS_DIR = DATA_DIR / "clients"
-DB_PATH = str(DATA_DIR / "projects.db")
-CHROMA_DIR = str(DATA_DIR / "chroma_db")
+router = APIRouter(prefix="/setup", tags=["setup"])
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
+
+class KeysRequest(BaseModel):
+    openai_key: str
+
 
 class MilestoneInput(BaseModel):
     title: str
@@ -29,7 +30,8 @@ class MilestoneInput(BaseModel):
 class ProjectInput(BaseModel):
     name: str
     client: str
-    repo_url: str
+    repo_owner: str
+    repo_name: str
     milestones: list[MilestoneInput] = []
 
 
@@ -43,27 +45,26 @@ def _sse(event_type: str, content: str) -> str:
     return f"data: {json.dumps({'type': event_type, 'content': content})}\n\n"
 
 
-def _github_headers() -> dict:
-    token = os.getenv("GITHUB_TOKEN", "")
-    h = {"User-Agent": "freelance-agent"}
+def _github_headers(token: str) -> dict:
+    h: dict[str, str] = {"User-Agent": "freelance-agent"}
     if token:
         h["Authorization"] = f"token {token}"
     return h
 
 
-def _fetch_readme(owner: str, repo: str) -> str:
+def _fetch_readme(owner: str, repo: str, token: str) -> str:
     r = requests.get(
         f"https://api.github.com/repos/{owner}/{repo}/readme",
-        headers={**_github_headers(), "Accept": "application/vnd.github.raw"},
+        headers={**_github_headers(token), "Accept": "application/vnd.github.raw"},
         timeout=10,
     )
     return r.text[:3000] if r.status_code == 200 else ""
 
 
-def _fetch_commits(owner: str, repo: str) -> list[str]:
+def _fetch_commits(owner: str, repo: str, token: str) -> list[str]:
     r = requests.get(
         f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=10",
-        headers=_github_headers(),
+        headers=_github_headers(token),
         timeout=10,
     )
     if r.status_code != 200:
@@ -77,12 +78,11 @@ def _fetch_commits(owner: str, repo: str) -> list[str]:
     return lines
 
 
-def _write_project_doc(proj: ProjectInput, readme: str, commits: list[str]) -> None:
-    repo_name = proj.repo_url.rstrip("/").split("/")[-1]
+def _build_doc_text(proj: ProjectInput, readme: str, commits: list[str]) -> str:
     lines = [
         f"# {proj.name} — {proj.client}",
         "",
-        f"Repository: {proj.repo_url}",
+        f"Repository: https://github.com/{proj.repo_owner}/{proj.repo_name}",
         "",
         "## Overview",
     ]
@@ -103,56 +103,49 @@ def _write_project_doc(proj: ProjectInput, readme: str, commits: list[str]) -> N
         lines.extend(commits[:10])
 
     lines += ["", f"## Client\n{proj.client}", ""]
-
-    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
-    (PROJECTS_DIR / f"{repo_name}.md").write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/keys")
-def key_status():
-    """Returns which API keys are present in .env (values never exposed)."""
-    return {
-        "openai": bool(os.getenv("OPENAI_API_KEY", "").strip()),
-        "github": bool(os.getenv("GITHUB_TOKEN", "").strip()),
-        "tavily": bool(os.getenv("TAVILY_API_KEY", "").strip()),
-    }
+@router.post("/keys")
+async def save_keys(body: KeysRequest, request: Request) -> dict[str, str]:
+    """Store the user's OpenAI key encrypted in the DB."""
+    user_id = get_user_id(request)
+    if not body.openai_key.strip().startswith("sk-"):
+        raise HTTPException(status_code=422, detail="Invalid OpenAI API key format")
+    encrypted = encrypt(body.openai_key.strip())
+    await db.set_openai_key(user_id, encrypted)
+    return {"status": "saved"}
 
 
 @router.get("/status")
-def setup_status():
-    """Returns whether the app has been configured (has at least one project)."""
-    db = Path(DB_PATH)
-    if not db.exists():
-        return {"configured": False}
-    try:
-        import sys
-        sys.path.insert(0, str(_BASE))
-        from db.sqlite import init_db, get_projects
-        init_db(DB_PATH)
-        projects = get_projects(DB_PATH)
-        return {"configured": len(projects) > 0}
-    except Exception:
-        return {"configured": False}
+async def setup_status(request: Request) -> dict[str, Any]:
+    """Returns whether this user has completed setup."""
+    user_id = get_user_id(request)
+    has_key = False
+    user = await db.get_user_by_github_id(
+        # look up by user_id indirectly via the request state
+        request.state.__dict__.get("user_id", user_id)
+    )
+    if user:
+        has_key = bool(user.get("openai_key_enc"))
+    configured = has_key and await db.has_projects(user_id)
+    return {"configured": configured, "has_openai_key": has_key}
 
 
 @router.get("/repos")
-def list_repos():
-    """Fetch the authenticated user's GitHub repos using GITHUB_TOKEN from .env."""
-    token = os.getenv("GITHUB_TOKEN", "")
-    if not token:
-        return {"error": "GITHUB_TOKEN not set in .env", "repos": []}
+async def list_repos(request: Request) -> dict[str, Any]:
+    """Fetch the authenticated user's GitHub repos using their OAuth token."""
+    get_user_id(request)
+    token = get_github_token(request)
+    headers = _github_headers(token)
 
-    headers = _github_headers()
-
-    # Get user info
     user_r = requests.get("https://api.github.com/user", headers=headers, timeout=10)
     if user_r.status_code != 200:
         return {"error": f"GitHub auth failed ({user_r.status_code})", "repos": []}
     user = user_r.json()
 
-    # Paginate repos
     repos = []
     page = 1
     while True:
@@ -176,6 +169,8 @@ def list_repos():
         "repos": [
             {
                 "full_name": rp["full_name"],
+                "owner": rp["owner"]["login"],
+                "repo_name": rp["name"],
                 "html_url": rp["html_url"],
                 "private": rp["private"],
                 "description": rp.get("description") or "",
@@ -187,67 +182,55 @@ def list_repos():
 
 
 @router.post("/complete")
-async def complete_setup(req: SetupRequest):
-    """SSE stream: fetch READMEs, write docs, seed SQLite, build ChromaDB."""
+async def complete_setup(req: SetupRequest, request: Request):
+    """SSE: fetch READMEs, seed Postgres, build pgvector index — per user."""
+    user_id = get_user_id(request)
+    token = get_github_token(request)
 
     async def _stream():
-        import sys
-        sys.path.insert(0, str(_BASE))
-
         yield _sse("progress", f"Starting setup for {len(req.projects)} project(s)...")
 
-        # Fetch GitHub data and write project docs
         for proj in req.projects:
-            parts = proj.repo_url.rstrip("/").split("/")
-            owner, repo_name = parts[-2], parts[-1]
+            yield _sse("progress", f"Fetching README for {proj.repo_owner}/{proj.repo_name}...")
+            readme = _fetch_readme(proj.repo_owner, proj.repo_name, token)
 
-            yield _sse("progress", f"Fetching README for {owner}/{repo_name}...")
-            readme = _fetch_readme(owner, repo_name)
+            yield _sse("progress", f"Fetching recent commits for {proj.repo_owner}/{proj.repo_name}...")
+            commits = _fetch_commits(proj.repo_owner, proj.repo_name, token)
 
-            yield _sse("progress", f"Fetching recent commits for {owner}/{repo_name}...")
-            commits = _fetch_commits(owner, repo_name)
-
-            yield _sse("progress", f"Writing project document for {proj.name}...")
-            _write_project_doc(proj, readme, commits)
-
-        # Seed SQLite
-        yield _sse("progress", "Seeding SQLite database...")
-        from db.sqlite import init_db, _connect
-
-        if Path(DB_PATH).exists():
-            Path(DB_PATH).unlink()
-        init_db(DB_PATH)
-
-        conn = _connect(DB_PATH)
-        for proj in req.projects:
-            cur = conn.execute(
-                "INSERT INTO projects (name, client, repo_url, status) VALUES (?, ?, ?, 'active')",
-                (proj.name, proj.client, proj.repo_url),
+            yield _sse("progress", f"Saving project {proj.name} to database...")
+            project = await db.create_project(
+                user_id=user_id,
+                name=proj.name,
+                client=proj.client or None,
+                repo_owner=proj.repo_owner,
+                repo_name=proj.repo_name,
             )
-            project_id = cur.lastrowid
+            project_id = str(project["id"])
+
             for m in proj.milestones:
-                conn.execute(
-                    "INSERT INTO milestones (project_id, title, due_date) VALUES (?, ?, ?)",
-                    (project_id, m.title, m.due_date),
+                await db.create_milestone(
+                    user_id=user_id,
+                    project_id=project_id,
+                    title=m.title,
+                    due_date=m.due_date,
                 )
-        conn.commit()
-        conn.close()
-        yield _sse("progress", f"SQLite seeded — {len(req.projects)} project(s) saved")
 
-        # Build ChromaDB
-        yield _sse("progress", "Building vector index (ChromaDB)...")
-        if Path(CHROMA_DIR).exists():
-            shutil.rmtree(CHROMA_DIR)
+            yield _sse("progress", f"Indexing documents for {proj.name}...")
+            doc_text = _build_doc_text(proj, readme, commits)
 
-        from rag.loader import load_documents
-        from rag.chunker import chunk_documents
-        from rag.retriever import build_retriever
+            # Use rag chunker so large docs are split sensibly
+            from langchain_core.documents import Document
+            raw_doc = Document(page_content=doc_text, metadata={"project": proj.name})
+            chunks = chunk_documents([raw_doc])
+            await index_documents(
+                user_id=user_id,
+                project_id=project_id,
+                chunks=chunks,
+                source="readme",
+            )
+            yield _sse("progress", f"Indexed {len(chunks)} chunks for {proj.name}")
 
-        docs = load_documents(str(DATA_DIR))
-        chunks = chunk_documents(docs)
-        build_retriever(chunks, persist_dir=CHROMA_DIR)
-        yield _sse("progress", f"ChromaDB ready — {len(chunks)} chunks indexed from {len(docs)} document(s)")
-
+        yield _sse("progress", f"Setup complete — {len(req.projects)} project(s) ready")
         yield _sse("done", "Setup complete")
 
     return StreamingResponse(

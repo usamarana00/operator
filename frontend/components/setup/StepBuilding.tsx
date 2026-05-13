@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ProjectConfig } from "./types";
 
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+
 type Props = {
   projects: ProjectConfig[];
+  token: string;
   onComplete: () => void;
 };
 
 type LogLine = { text: string; done: boolean };
 
-export default function StepBuilding({ projects, onComplete }: Props) {
+export default function StepBuilding({ projects, token, onComplete }: Props) {
   const [log, setLog] = useState<LogLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -27,16 +30,20 @@ export default function StepBuilding({ projects, onComplete }: Props) {
       projects: projects.map((p) => ({
         name: p.name,
         client: p.client,
-        repo_url: p.repo.html_url,
+        repo_owner: p.repo.owner,
+        repo_name: p.repo.repo_name,
         milestones: p.milestones.filter((m) => m.title && m.due_date),
       })),
     };
 
     (async () => {
       try {
-        const res = await fetch("/api/backend/setup/complete", {
+        const res = await fetch(`${BACKEND}/setup/complete`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         });
 
@@ -67,7 +74,7 @@ export default function StepBuilding({ projects, onComplete }: Props) {
                 setError(event.content);
               }
             } catch {
-              // skip malformed
+              // skip malformed events
             }
           }
         }
@@ -85,7 +92,7 @@ export default function StepBuilding({ projects, onComplete }: Props) {
       <p className="text-sm text-gray-500 mb-4">
         {done
           ? "Your projects have been indexed. The AI is ready."
-          : "Fetching READMEs, seeding the database, and indexing into ChromaDB."}
+          : "Fetching READMEs, seeding the database, and building the vector index."}
       </p>
 
       <div className="bg-gray-950 rounded-lg p-4 h-56 overflow-y-auto font-mono text-xs mb-4">

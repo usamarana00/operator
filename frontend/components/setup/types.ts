@@ -1,5 +1,7 @@
 export type GithubRepo = {
   full_name: string;
+  owner: string;
+  repo_name: string;
   html_url: string;
   private: boolean;
   description: string;

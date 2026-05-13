@@ -1,85 +1,70 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import StepValidate from "./StepValidate";
 import StepRepos from "./StepRepos";
 import StepConfigure from "./StepConfigure";
 import StepBuilding from "./StepBuilding";
 import { GithubRepo, ProjectConfig } from "./types";
 
-type KeyStatus = { openai: boolean; github: boolean; tavily: boolean };
-
 type Props = {
   onComplete: () => void;
 };
 
 const STEPS = ["Keys", "Repos", "Configure", "Build"];
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
 export default function SetupWizard({ onComplete }: Props) {
-  const [step, setStep] = useState(0);
+  const { data: session } = useSession();
+  const token = (session as any)?.accessToken as string ?? "";
 
-  // Step 0 state
-  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
-  const [keyError, setKeyError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
 
   // Step 1 state
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [githubUser, setGithubUser] = useState("");
   const [selectedRepos, setSelectedRepos] = useState<GithubRepo[]>([]);
   const [repoLoading, setRepoLoading] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
 
   // Step 2 state
   const [projects, setProjects] = useState<ProjectConfig[]>([]);
 
-  // Fetch key status on mount
-  useEffect(() => {
-    fetch("/api/backend/setup/status")
-      .then((r) => r.json())
-      .then((data) => {
-        // /setup/status returns configured bool, but we also need key status
-        // Re-use /setup/repos as a proxy — if it returns user, github key is valid
-        setKeyStatus({
-          openai: !data.openai_missing,
-          github: !data.github_missing,
-          tavily: !data.tavily_missing,
-        });
-      })
-      .catch(() => setKeyError("Could not reach backend. Is it running?"));
+  const authHeaders = {
+    Authorization: `Bearer ${token}`,
+  };
 
-    fetch("/api/backend/setup/keys")
-      .then((r) => r.json())
-      .then((data) => setKeyStatus(data))
-      .catch(() => setKeyError("Could not reach backend. Is it running?"));
-  }, []);
-
-  // Fetch repos when moving to step 1
   const goToRepos = async () => {
     setStep(1);
     if (repos.length > 0) return;
     setRepoLoading(true);
+    setRepoError(null);
     try {
-      const r = await fetch("/api/backend/setup/repos");
+      const r = await fetch(`${BACKEND}/setup/repos`, { headers: authHeaders });
       const data = await r.json();
       if (data.error) {
-        setKeyError(data.error);
+        setRepoError(data.error);
         setStep(0);
       } else {
         setRepos(data.repos);
         setGithubUser(data.user?.login ?? "");
       }
     } catch {
-      setKeyError("Failed to fetch repositories.");
+      setRepoError("Failed to fetch repositories.");
       setStep(0);
     } finally {
       setRepoLoading(false);
     }
   };
 
-  // Pre-populate project configs when moving to step 2
   const goToConfigure = () => {
     setProjects(
       selectedRepos.map((repo) => ({
         repo,
-        name: repo.full_name.split("/")[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        name: repo.full_name
+          .split("/")[1]
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
         client: "",
         milestones: [],
       }))
@@ -90,7 +75,6 @@ export default function SetupWizard({ onComplete }: Props) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center p-4">
       <div className="w-full max-w-xl">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">🤖</div>
           <h1 className="text-2xl font-bold text-gray-900">Freelance Agent Setup</h1>
@@ -120,14 +104,9 @@ export default function SetupWizard({ onComplete }: Props) {
           ))}
         </div>
 
-        {/* Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           {step === 0 && (
-            <StepValidate
-              status={keyStatus}
-              error={keyError}
-              onNext={goToRepos}
-            />
+            <StepValidate token={token} onNext={goToRepos} />
           )}
 
           {step === 1 && (
@@ -160,13 +139,14 @@ export default function SetupWizard({ onComplete }: Props) {
           {step === 3 && (
             <StepBuilding
               projects={projects}
+              token={token}
               onComplete={onComplete}
             />
           )}
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-4">
-          Your API keys are read from <code className="bg-gray-100 px-1 rounded">.env</code> on the server and never sent to this browser.
+          Signed in via GitHub OAuth. Your OpenAI key is encrypted at rest.
         </p>
       </div>
     </div>

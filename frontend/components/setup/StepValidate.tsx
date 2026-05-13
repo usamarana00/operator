@@ -1,70 +1,105 @@
-type KeyStatus = {
-  openai: boolean;
-  github: boolean;
-  tavily: boolean;
-};
+"use client";
+import { useState } from "react";
+
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
 type Props = {
-  status: KeyStatus | null;
-  error: string | null;
+  token: string;
   onNext: () => void;
 };
 
-function KeyRow({ label, ok }: { label: string; ok: boolean }) {
-  return (
-    <div className="flex items-center gap-3 py-2">
-      <span className={`text-sm font-mono px-2 py-0.5 rounded ${ok ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
-        {ok ? "✓" : "✗"}
-      </span>
-      <span className="text-sm text-gray-700">{label}</span>
-      {!ok && <span className="text-xs text-red-500 ml-auto">missing in .env</span>}
-      {ok && <span className="text-xs text-green-600 ml-auto">found</span>}
-    </div>
-  );
-}
+export default function StepValidate({ token, onNext }: Props) {
+  const [key, setKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
-export default function StepValidate({ status, error, onNext }: Props) {
-  const allRequired = status?.openai && status?.github;
+  async function handleSave() {
+    if (!key.trim().startsWith("sk-")) {
+      setError("Key must start with sk-");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${BACKEND}/setup/keys`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ openai_key: key.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? "Failed to save key");
+      }
+      setSaved(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">Check API Keys</h2>
+      <h2 className="text-lg font-semibold text-gray-800 mb-1">Add your OpenAI key</h2>
       <p className="text-sm text-gray-500 mb-6">
-        These keys must be set in <code className="bg-gray-100 px-1 rounded text-xs">backend/.env</code> before continuing.
-        They are read server-side and never sent to the browser.
+        Your GitHub account is already connected. We just need your OpenAI API key — it
+        will be encrypted and stored securely, never shared.
       </p>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {status ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 divide-y divide-gray-100 mb-6">
-          <KeyRow label="OPENAI_API_KEY" ok={status.openai} />
-          <KeyRow label="GITHUB_TOKEN" ok={status.github} />
-          <KeyRow label="TAVILY_API_KEY (optional)" ok={status.tavily} />
-        </div>
-      ) : (
-        <div className="h-28 bg-gray-50 rounded-lg flex items-center justify-center text-sm text-gray-400 mb-6">
-          Checking...
-        </div>
-      )}
-
-      {!allRequired && status && (
-        <p className="text-xs text-red-600 mb-4">
-          Set the missing keys in <code>backend/.env</code>, then restart the backend and refresh this page.
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">
+          OpenAI API Key
+        </label>
+        <input
+          type="password"
+          placeholder="sk-proj-..."
+          value={key}
+          onChange={(e) => { setKey(e.target.value); setSaved(false); setError(""); }}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <p className="text-xs text-gray-400 mt-1">
+          Get yours at{" "}
+          <a
+            href="https://platform.openai.com/api-keys"
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-500 underline"
+          >
+            platform.openai.com/api-keys
+          </a>
         </p>
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-600 mb-3">{error}</p>
       )}
 
-      <button
-        disabled={!allRequired}
-        onClick={onNext}
-        className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
-      >
-        Next — Select repositories
-      </button>
+      {saved && (
+        <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+          <span>✓</span> Key saved securely
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={saving || !key.trim()}
+          className="flex-1 py-2.5 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-40 transition-colors"
+        >
+          {saving ? "Saving…" : saved ? "Saved ✓" : "Save key"}
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!saved}
+          className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
+        >
+          Next — Select repos →
+        </button>
+      </div>
     </div>
   );
 }
