@@ -1,32 +1,17 @@
-import os
 import requests
-from pathlib import Path
+from mcp.s3_fs import filesystem_read, filesystem_write, filesystem_list
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-NOTES_DIR = DATA_DIR / "notes"
-NOTES_DIR.mkdir(exist_ok=True)
+# Re-export S3-backed filesystem MCP tools under the original names.
+# Callers must now pass user_id as the first argument.
 
-
-# --- Filesystem MCP ---
-
-def filesystem_read(file_path: str) -> str:
-    target = DATA_DIR / file_path
-    if not target.exists():
-        return f"File not found: {file_path}"
-    return target.read_text(encoding="utf-8")
-
-
-def filesystem_write(file_path: str, content: str) -> str:
-    target = NOTES_DIR / file_path
-    target.write_text(content, encoding="utf-8")
-    return f"Written to {target}"
-
-
-def filesystem_list(directory: str = "projects") -> list[str]:
-    target = DATA_DIR / directory
-    if not target.exists():
-        return []
-    return [f.name for f in target.iterdir() if f.is_file()]
+__all__ = [
+    "filesystem_read",
+    "filesystem_write",
+    "filesystem_list",
+    "github_mcp_list_issues",
+    "github_mcp_list_prs",
+    "MCP_TOOLS",
+]
 
 
 # --- GitHub MCP ---

@@ -25,6 +25,7 @@ load_dotenv()
 from auth import AuthMiddleware, get_user_id, get_github_token
 from db.postgres import init_schema, close_pool, get_projects, get_milestones
 from routers.setup import router as setup_router
+from routers.files import router as files_router
 from agents.planner import classify_intent
 from agents.project_manager import run_pm_agent
 from agents.github_agent import run_github_agent
@@ -45,6 +46,7 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 app.include_router(setup_router)
+app.include_router(files_router)
 
 
 @app.on_event("startup")
