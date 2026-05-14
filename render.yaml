@@ -23,7 +23,7 @@ services:
       - key: AWS_REGION
         sync: false
       - key: AWS_S3_BUCKET
-        value: freelance-agent-prod
+        value: false
       - key: TAVILY_API_KEY
         sync: false
       - key: OPENAI_API_KEY
