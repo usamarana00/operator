@@ -1,13 +1,20 @@
-export { default } from "next-auth/middleware";
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function middleware(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const { pathname } = req.nextUrl;
+
+  if (!token) {
+    const signInUrl = new URL("/", req.url);
+    return NextResponse.redirect(signInUrl);
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
-    /*
-     * Protect everything except:
-     * - NextAuth routes (/api/auth/*)
-     * - Static assets
-     * - Favicon
-     */
     "/((?!api/auth|_next/static|_next/image|favicon.ico).*)",
   ],
 };

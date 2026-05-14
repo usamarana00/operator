@@ -25,7 +25,7 @@ const handler = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      (session as any).accessToken = token as string;
+      (session as any).accessToken = token.github_token as string;
       (session as any).github_login = token.github_login;
       return session;
     },

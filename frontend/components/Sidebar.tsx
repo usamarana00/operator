@@ -8,6 +8,7 @@ type Milestone = {
   title: string;
   due_date: string;
   status: string;
+  completed: number;
   project_id: string;
 };
 

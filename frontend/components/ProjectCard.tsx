@@ -1,13 +1,13 @@
 type Milestone = {
-  id: number;
+  id: string;
   title: string;
   due_date: string;
   completed: number;
-  project_id: number;
+  project_id: string;
 };
 
 type Project = {
-  id: number;
+  id: string;
   name: string;
   client: string;
   status: string;
