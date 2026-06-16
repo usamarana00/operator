@@ -16,7 +16,9 @@ def test_resolves_by_project_name():
 
 
 def test_resolves_by_repo_slug():
-    assert _resolve_repo_url("paki portal", PROJECTS) == "https://github.com/acme/paki-portal"
+    # "project alpha" does NOT match the name "Alpha", only the slug "project-alpha"
+    # (dashes converted to spaces) — isolates the slug-matching branch.
+    assert _resolve_repo_url("project alpha", PROJECTS) == "https://github.com/acme/project-alpha"
 
 
 def test_falls_back_to_first_project():
