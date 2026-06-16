@@ -67,6 +67,11 @@ def _route(state: AgentState) -> str:
     return "response"
 
 
+def _route_after_pm(state: AgentState) -> str:
+    """After the PM node, 'both' intents continue to GitHub; everyone else synthesizes."""
+    return "github" if state.get("intent") == "both" else "response"
+
+
 def _build_graph():
     graph = StateGraph(AgentState)
     graph.add_node("planner", _planner_node)
@@ -80,7 +85,10 @@ def _build_graph():
         "github": "github",
         "response": "response",
     })
-    graph.add_edge("pm", "response")
+    graph.add_conditional_edges("pm", _route_after_pm, {
+        "github": "github",
+        "response": "response",
+    })
     graph.add_edge("github", "response")
     graph.add_edge("response", END)
 
