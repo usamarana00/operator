@@ -1,9 +1,7 @@
 import os
 import sys
-from dotenv import load_dotenv
 
-# Load .env from project root
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+# Tests must never need real keys.
+os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy")
 
-# Add backend to path so imports work
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
