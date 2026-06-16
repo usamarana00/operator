@@ -1,0 +1,21 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+langchain==0.3.7
+langchain-openai==0.2.6
+langchain-community==0.3.7
+langchain-text-splitters==0.3.2
+langgraph==0.2.38
+pypdf==5.1.0
+python-dotenv==1.0.1
+requests==2.32.3
+tavily-python==0.5.0
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2
+# Phase A: auth + DB + encryption + S3
+asyncpg==0.29.0
+pgvector==0.3.2
+PyJWT==2.9.0
+cryptography==43.0.3
+boto3==1.35.0
+slowapi==0.1.9

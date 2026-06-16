@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: freelance-agent-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NEON_DATABASE_URL
+        sync: false          # set in Render dashboard
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: APP_ENCRYPTION_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false          # e.g. https://freelance-agent.vercel.app
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_S3_BUCKET
+        value: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false          # fallback for server-side build step only
