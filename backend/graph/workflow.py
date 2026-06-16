@@ -13,6 +13,26 @@ from db.postgres import get_projects
 load_dotenv()
 
 
+def _resolve_repo_url(entity_project: str, projects: list[dict]) -> str | None:
+    """Pick a repo URL from the user's projects, matching the named entity by
+    project name or repo slug, falling back to the first project."""
+    def url_for(p: dict) -> str | None:
+        owner = p.get("repo_owner", "")
+        repo = p.get("repo_name", "")
+        return f"https://github.com/{owner}/{repo}" if owner and repo else None
+
+    term = (entity_project or "").lower()
+    if term:
+        for p in projects:
+            name_match = term in p["name"].lower()
+            repo_slug = (p.get("repo_name") or "").replace("-", " ").lower()
+            if name_match or term in repo_slug:
+                return url_for(p)
+    if projects:
+        return url_for(projects[0])
+    return None
+
+
 async def _planner_node(state: AgentState) -> AgentState:
     result = classify_intent(state["message"], state["history"])
     return {**state, "intent": result["intent"], "entities": result.get("entities", {})}
@@ -25,19 +45,8 @@ async def _pm_node(state: AgentState) -> AgentState:
 
 async def _github_node(state: AgentState) -> AgentState:
     projects = await get_projects(state["user_id"])
-    repo_url = None
-    entity_project = (state.get("entities") or {}).get("project") or ""
-    for p in projects:
-        if entity_project and entity_project.lower() in p["name"].lower():
-            owner = p.get("repo_owner", "")
-            repo = p.get("repo_name", "")
-            repo_url = f"https://github.com/{owner}/{repo}" if owner and repo else None
-            break
-    if not repo_url and projects:
-        p = projects[0]
-        owner = p.get("repo_owner", "")
-        repo = p.get("repo_name", "")
-        repo_url = f"https://github.com/{owner}/{repo}" if owner and repo else None
+    entity_project = (state.get("entities") or {}).get("project") or (state.get("entities") or {}).get("repo") or ""
+    repo_url = _resolve_repo_url(entity_project, projects)
 
     output = run_github_agent(
         state["message"], repo_url, state["history"],

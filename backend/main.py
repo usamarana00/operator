@@ -35,6 +35,7 @@ from agents.github_agent import run_github_agent
 from agents.response_agent import run_response_agent
 from memory.buffer_memory import get_history, save_exchange
 from mcp.servers import filesystem_write
+from graph.workflow import _resolve_repo_url
 
 _FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 
@@ -121,23 +122,8 @@ async def _stream(message: str, session_id: str, user_id: str, github_token: str
         await asyncio.sleep(0)
 
         projects = await get_projects(user_id)
-        repo_url = None
         entity_project = (entities or {}).get("project") or (entities or {}).get("repo") or ""
-        if entity_project:
-            term = entity_project.lower()
-            for p in projects:
-                name_match = term in p["name"].lower()
-                repo_slug = (p.get("repo_name") or "").replace("-", " ").lower()
-                if name_match or term in repo_slug:
-                    owner = p.get("repo_owner", "")
-                    repo = p.get("repo_name", "")
-                    repo_url = f"https://github.com/{owner}/{repo}" if owner and repo else None
-                    break
-        if not repo_url and projects:
-            p = projects[0]
-            owner = p.get("repo_owner", "")
-            repo = p.get("repo_name", "")
-            repo_url = f"https://github.com/{owner}/{repo}" if owner and repo else None
+        repo_url = _resolve_repo_url(entity_project, projects)
 
         logger.info("[GitHub Agent] repo_url=%s", repo_url)
         if repo_url:
