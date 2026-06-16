@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from cryptography.fernet import Fernet
 
-from backend.db import postgres as db
+from db import postgres as db
 
 logger = logging.getLogger(__name__)
 
