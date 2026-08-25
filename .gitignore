@@ -22,7 +22,6 @@ next-env.d.ts
 
 # Data artifacts (regenerated at runtime)
 backend/data/projects.db
-backend/data/chroma_db/
 backend/data/seed.py.tmp.*
 backend/data/projects/*.md
 backend/data/clients/*.txt
