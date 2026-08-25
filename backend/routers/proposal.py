@@ -1,10 +1,10 @@
-import html
 import logging
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
+from fpdf import FPDF
 
 from agents.producer_agent import ProducerAgent
 from auth import get_github_token, get_user_id
@@ -12,6 +12,14 @@ from db import postgres as db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["proposal"])
+
+
+def _render_pdf(content: str) -> bytes:
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=11)
+    pdf.multi_cell(0, 8, content)
+    return bytes(pdf.output())
 
 
 class ProposalRequest(BaseModel):
@@ -88,22 +96,7 @@ async def proposal_pdf(session_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Proposal not found")
 
     try:
-        from weasyprint import HTML
-
-        document = f"""
-        <!doctype html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              body {{ font-family: sans-serif; line-height: 1.5; padding: 32px; }}
-              pre {{ white-space: pre-wrap; font-family: inherit; }}
-            </style>
-          </head>
-          <body><pre>{html.escape(content)}</pre></body>
-        </html>
-        """
-        pdf = HTML(string=document).write_pdf()
+        pdf = _render_pdf(content)
         return Response(
             content=pdf,
             media_type="application/pdf",
