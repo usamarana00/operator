@@ -118,9 +118,8 @@ docker compose up -d
 ### 2. Backend env + run
 ```bash
 cp backend/.env.example backend/.env   # fill NEON_DATABASE_URL (local), APP_ENCRYPTION_KEY, NEXTAUTH_SECRET, OPENAI_API_KEY, AWS_* (LocalStack)
-python -m venv .venv && source .venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn backend.main:app --reload     # http://localhost:8000
+uv sync
+uv run uvicorn backend.main:app --reload     # http://localhost:8000
 ```
 Generate the two secrets:
 ```bash
@@ -223,7 +222,7 @@ Setup state lives in Postgres per user, not in local files. To reconfigure, eith
 ## Running tests
 
 ```bash
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 ---
