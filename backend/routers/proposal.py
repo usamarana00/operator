@@ -14,21 +14,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["proposal"])
 
 
-def _render_pdf(content: str) -> bytes:
+def _sanitize_latin1(content: str) -> str:
     # Sanitize content to Latin-1 by transliterating smart punctuation
     # and replacing any remaining unencodable characters with '?'
     sanitized = content
 
-    # Transliterate common smart punctuation to ASCII equivalents
+    # Transliterate common smart punctuation to ASCII equivalents.
+    # Keys use explicit \uXXXX escapes (not literal characters) so the
+    # mapping can't be silently corrupted by quote-nesting/parsing accidents.
     smart_quote_map = {
-        '"': '"',  # Left double quotation mark U+201C → "
-        '"': '"',  # Right double quotation mark U+201D → "
-        ''': "'",  # Left single quotation mark U+2018 → '
-        ''': "'",  # Right single quotation mark U+2019 → '
-        '—': '-',  # Em dash U+2014 → -
-        '–': '-',  # En dash U+2013 → -
-        '…': '...',  # Ellipsis U+2026 → ...
-        '•': '-',  # Bullet U+2022 → -
+        "\u201c": '"',    # Left double quotation mark
+        "\u201d": '"',    # Right double quotation mark
+        "\u2018": "'",    # Left single quotation mark
+        "\u2019": "'",    # Right single quotation mark
+        "\u2014": "-",    # Em dash
+        "\u2013": "-",    # En dash
+        "\u2026": "...",  # Ellipsis
+        "\u2022": "-",    # Bullet
     }
 
     for smart_char, ascii_char in smart_quote_map.items():
@@ -36,6 +38,12 @@ def _render_pdf(content: str) -> bytes:
 
     # Backstop: replace any remaining unencodable characters with '?'
     sanitized = sanitized.encode('latin-1', 'replace').decode('latin-1')
+
+    return sanitized
+
+
+def _render_pdf(content: str) -> bytes:
+    sanitized = _sanitize_latin1(content)
 
     pdf = FPDF()
     pdf.add_page()

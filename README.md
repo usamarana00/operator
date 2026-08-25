@@ -106,7 +106,7 @@ The backend is multi-tenant and auth-gated, so local dev runs the full stack:
 Postgres + pgvector (Docker), S3 (LocalStack), FastAPI, and Next.js with GitHub OAuth.
 
 ### Prerequisites
-- Python 3.11+, Node.js 18+, Docker
+- [uv](https://docs.astral.sh/uv/) (installs Python for you), Node.js 18+, Docker
 - A GitHub OAuth app (Settings → Developers → New OAuth App), callback `http://localhost:3000/api/auth/callback/github`
 - An OpenAI API key
 
