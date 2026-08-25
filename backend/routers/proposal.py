@@ -15,10 +15,32 @@ router = APIRouter(tags=["proposal"])
 
 
 def _render_pdf(content: str) -> bytes:
+    # Sanitize content to Latin-1 by transliterating smart punctuation
+    # and replacing any remaining unencodable characters with '?'
+    sanitized = content
+
+    # Transliterate common smart punctuation to ASCII equivalents
+    smart_quote_map = {
+        '"': '"',  # Left double quotation mark U+201C → "
+        '"': '"',  # Right double quotation mark U+201D → "
+        ''': "'",  # Left single quotation mark U+2018 → '
+        ''': "'",  # Right single quotation mark U+2019 → '
+        '—': '-',  # Em dash U+2014 → -
+        '–': '-',  # En dash U+2013 → -
+        '…': '...',  # Ellipsis U+2026 → ...
+        '•': '-',  # Bullet U+2022 → -
+    }
+
+    for smart_char, ascii_char in smart_quote_map.items():
+        sanitized = sanitized.replace(smart_char, ascii_char)
+
+    # Backstop: replace any remaining unencodable characters with '?'
+    sanitized = sanitized.encode('latin-1', 'replace').decode('latin-1')
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 8, content)
+    pdf.multi_cell(0, 8, sanitized)
     return bytes(pdf.output())
 
 
