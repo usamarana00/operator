@@ -3,8 +3,8 @@ services:
     name: freelance-agent-api
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
     healthCheckPath: /health
     envVars:
