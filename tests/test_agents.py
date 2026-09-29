@@ -1,84 +1,43 @@
-import pytest
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+from unittest.mock import patch, MagicMock
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+
+from agents.planner import classify_intent
 
 
-def test_classify_deadline_intent():
-    from agents.planner import classify_intent
-    result = classify_intent("What deadlines do I have this week?", [])
-    assert result["intent"] in ("deadline", "both")
+def _fake_llm_response(content: str):
+    msg = MagicMock()
+    msg.content = content
+    return msg
 
 
-def test_classify_repo_intent():
-    from agents.planner import classify_intent
-    result = classify_intent("Show me open PRs for Project Alpha", [])
-    assert result["intent"] in ("repo", "both")
+def test_classify_intent_handles_bad_json():
+    with patch("agents.planner._PROMPT") as prompt:
+        chain = MagicMock()
+        chain.invoke.return_value = _fake_llm_response("not json at all")
+        prompt.__or__.return_value = chain
+        result = classify_intent("hello", [])
+        assert result["intent"] == "general"
 
 
-def test_classify_both_intent():
-    from agents.planner import classify_intent
-    result = classify_intent("What's the status of Project Beta repo and its deadline?", [])
-    assert result["intent"] in ("both", "deadline", "repo")
+def test_classify_intent_extracts_valid_intent():
+    with patch("agents.planner._PROMPT") as prompt:
+        chain = MagicMock()
+        chain.invoke.return_value = _fake_llm_response(
+            '{"intent": "repo", "entities": {"project": "Alpha", "repo": null}}'
+        )
+        prompt.__or__.return_value = chain
+        result = classify_intent("show PRs for Alpha", [])
+        assert result["intent"] == "repo"
+        assert result["entities"]["project"] == "Alpha"
 
 
-def test_classify_general_intent():
-    from agents.planner import classify_intent
-    result = classify_intent("Hello, what can you do?", [])
-    assert result["intent"] == "general"
-
-
-def test_result_has_entities_key():
-    from agents.planner import classify_intent
-    result = classify_intent("Check the alpha project deadlines", [])
-    assert "entities" in result
-
-
-def test_pm_agent_returns_deadline_info(tmp_path):
-    from rag.loader import load_documents
-    from rag.chunker import chunk_documents
-    from rag.retriever import build_retriever
-    from agents.project_manager import run_pm_agent
-
-    data_dir = os.path.join(os.path.dirname(__file__), '..', 'backend', 'data')
-    chroma_dir = str(tmp_path / "chroma")
-    docs = load_documents(data_dir)
-    chunks = chunk_documents(docs)
-    retriever = build_retriever(chunks, persist_dir=chroma_dir)
-    result = run_pm_agent("What deadlines are coming up?", retriever, [])
-    assert isinstance(result, str)
-    assert len(result) > 10
-
-
-def test_pm_agent_mentions_milestones(tmp_path):
-    from rag.loader import load_documents
-    from rag.chunker import chunk_documents
-    from rag.retriever import build_retriever
-    from agents.project_manager import run_pm_agent
-
-    data_dir = os.path.join(os.path.dirname(__file__), '..', 'backend', 'data')
-    chroma_dir = str(tmp_path / "chroma")
-    docs = load_documents(data_dir)
-    chunks = chunk_documents(docs)
-    retriever = build_retriever(chunks, persist_dir=chroma_dir)
-    result = run_pm_agent("What milestones are due for Project Alpha?", retriever, [])
-    assert any(word in result.lower() for word in ("milestone", "deadline", "due", "alpha", "launch"))
-
-
-def test_github_agent_returns_string():
-    from agents.github_agent import run_github_agent
-    result = run_github_agent("Show open issues", repo_url=None, history=[])
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-def test_response_agent_synthesizes():
-    from agents.response_agent import run_response_agent
-    result = run_response_agent(
-        original_message="What's the status of my projects?",
-        pm_output="Design Review due 2026-04-28 for Project Alpha.",
-        github_output="3 open PRs in alpha repo.",
-        history=[],
-    )
-    assert isinstance(result, str)
-    assert len(result) > 20
+def test_classify_intent_rejects_unknown_intent():
+    with patch("agents.planner._PROMPT") as prompt:
+        chain = MagicMock()
+        chain.invoke.return_value = _fake_llm_response('{"intent": "banana", "entities": {}}')
+        prompt.__or__.return_value = chain
+        result = classify_intent("???", [])
+        assert result["intent"] == "general"

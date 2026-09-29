@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git add *)",
-      "Bash(git commit -m 'feat\\(phase-c\\): S3 MCP + file upload \\(closes #1\\) *)"
-    ]
-  }
-}

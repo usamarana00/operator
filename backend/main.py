@@ -9,8 +9,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     datefmt="%H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("freelance_agent")
 
@@ -24,18 +25,21 @@ load_dotenv()
 
 from auth import AuthMiddleware, get_user_id, get_github_token
 from db.postgres import init_schema, close_pool, get_projects, get_milestones
+from routers.briefing import router as briefing_router
 from routers.setup import router as setup_router
 from routers.files import router as files_router
+from routers.proposal import router as proposal_router
 from agents.planner import classify_intent
 from agents.project_manager import run_pm_agent
 from agents.github_agent import run_github_agent
 from agents.response_agent import run_response_agent
 from memory.buffer_memory import get_history, save_exchange
 from mcp.servers import filesystem_write
+from graph.workflow import _resolve_repo_url
 
 _FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 
-app = FastAPI(title="Freelance Agent API")
+app = FastAPI(title="Keystone API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,12 +51,15 @@ app.add_middleware(AuthMiddleware)
 
 app.include_router(setup_router)
 app.include_router(files_router)
+app.include_router(briefing_router)
+app.include_router(proposal_router)
 
 
 @app.on_event("startup")
 async def startup():
     await init_schema()
-    logger.info("DB schema ready")
+    logger.info("startup: schema initialized")
+    logger.info("startup: routers registered: chat, setup, files, briefing, proposal")
 
 
 @app.on_event("shutdown")
@@ -115,23 +122,8 @@ async def _stream(message: str, session_id: str, user_id: str, github_token: str
         await asyncio.sleep(0)
 
         projects = await get_projects(user_id)
-        repo_url = None
         entity_project = (entities or {}).get("project") or (entities or {}).get("repo") or ""
-        if entity_project:
-            term = entity_project.lower()
-            for p in projects:
-                name_match = term in p["name"].lower()
-                repo_slug = (p.get("repo_name") or "").replace("-", " ").lower()
-                if name_match or term in repo_slug:
-                    owner = p.get("repo_owner", "")
-                    repo = p.get("repo_name", "")
-                    repo_url = f"https://github.com/{owner}/{repo}" if owner and repo else None
-                    break
-        if not repo_url and projects:
-            p = projects[0]
-            owner = p.get("repo_owner", "")
-            repo = p.get("repo_name", "")
-            repo_url = f"https://github.com/{owner}/{repo}" if owner and repo else None
+        repo_url = _resolve_repo_url(entity_project, projects)
 
         logger.info("[GitHub Agent] repo_url=%s", repo_url)
         if repo_url:

@@ -25,7 +25,9 @@ const handler = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      (session as any).accessToken = token.github_token as string;
+      // Intentionally not exposing token.github_token here: the raw GitHub
+      // OAuth token stays server-side. The backend receives it via a
+      // short-lived signed JWT minted by /api/backend-token instead.
       (session as any).github_login = token.github_login;
       return session;
     },

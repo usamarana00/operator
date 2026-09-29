@@ -3,12 +3,13 @@ import logging
 from typing import Any
 
 import jwt
+import requests
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from cryptography.fernet import Fernet
 
-from backend.db import postgres as db
+from db import postgres as db
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,9 @@ def decrypt(ciphertext: bytes) -> str:
 
 
 def _decode_nextauth_jwt(token: str) -> dict[str, Any]:
-    secret = os.environ["NEXTAUTH_SECRET"]
+    secret = os.environ.get("NEXTAUTH_SECRET")
+    if not secret:
+        raise HTTPException(status_code=401, detail="NEXTAUTH_SECRET is not configured")
     try:
         payload = jwt.decode(
             token,
@@ -45,6 +48,34 @@ def _decode_nextauth_jwt(token: str) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail=f"Invalid token: {exc}")
 
 
+def _token_kind(token: str) -> str:
+    if token.startswith("gho_"):
+        return "github_oauth"
+    if token.count(".") == 2:
+        return "jwt"
+    return "unknown"
+
+
+def _get_github_user(token: str) -> dict[str, Any]:
+    response = requests.get(
+        "https://api.github.com/user",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "freelance-agent",
+        },
+        timeout=10,
+    )
+    if response.status_code != 200:
+        logger.warning(
+            "GitHub token validation failed: status=%s token_kind=%s",
+            response.status_code,
+            _token_kind(token),
+        )
+        raise HTTPException(status_code=401, detail="Invalid GitHub token")
+    return response.json()
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.url.path in _PUBLIC_PATHS:
@@ -56,16 +87,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=401, content={"detail": "Missing token"})
 
         token = auth_header.removeprefix("Bearer ").strip()
+        token_kind = _token_kind(token)
+        logger.info("Auth start: path=%s token_kind=%s", request.url.path, token_kind)
 
+        github_token_raw = None
+        auth_source = "nextauth_jwt"
         try:
             payload = _decode_nextauth_jwt(token)
-        except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-
-        github_id = str(payload.get("sub", ""))
-        github_login = payload.get("github_login", "")
-        email = payload.get("email")
-        github_token_raw = payload.get("github_token")
+            github_id = str(payload.get("sub", ""))
+            github_login = payload.get("github_login", "")
+            email = payload.get("email")
+            github_token_raw = payload.get("github_token")
+        except HTTPException:
+            try:
+                github_user = _get_github_user(token)
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            github_id = str(github_user.get("id", ""))
+            github_login = github_user.get("login", "")
+            email = github_user.get("email")
+            github_token_raw = token
+            auth_source = "github_oauth"
 
         if not github_id:
             return JSONResponse(status_code=401, content={"detail": "Token missing sub"})
@@ -86,6 +128,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.user_id = str(user["id"])
         request.state.github_login = github_login
         request.state.github_token_enc = user.get("github_token_enc")
+        logger.info(
+            "Auth ok: path=%s source=%s github_id=%s login=%s has_raw_github_token=%s has_stored_github_token=%s user_id=%s",
+            request.url.path,
+            auth_source,
+            github_id,
+            github_login,
+            bool(github_token_raw),
+            bool(request.state.github_token_enc),
+            request.state.user_id,
+        )
 
         return await call_next(request)
 
@@ -93,6 +145,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
 def get_github_token(request: Request) -> str:
     enc = getattr(request.state, "github_token_enc", None)
     if not enc:
+        logger.warning(
+            "GitHub token missing on request state: path=%s user_id=%s login=%s",
+            request.url.path,
+            getattr(request.state, "user_id", ""),
+            getattr(request.state, "github_login", ""),
+        )
         raise HTTPException(status_code=400, detail="GitHub token not found for user")
     return decrypt(bytes(enc))
 

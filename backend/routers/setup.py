@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 import re
 from typing import Any
 
@@ -14,6 +16,7 @@ from rag.chunker import chunk_documents
 from rag.retriever import index_documents
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+logger = logging.getLogger(__name__)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -112,10 +115,18 @@ def _build_doc_text(proj: ProjectInput, readme: str, commits: list[str]) -> str:
 async def save_keys(body: KeysRequest, request: Request) -> dict[str, str]:
     """Store the user's OpenAI key encrypted in the DB."""
     user_id = get_user_id(request)
+    logger.info(
+        "Setup keys save requested: user_id=%s has_key=%s key_prefix_valid=%s",
+        user_id,
+        bool(body.openai_key.strip()),
+        body.openai_key.strip().startswith("sk-"),
+    )
     if not body.openai_key.strip().startswith("sk-"):
+        logger.warning("Setup keys rejected: user_id=%s reason=invalid_format", user_id)
         raise HTTPException(status_code=422, detail="Invalid OpenAI API key format")
     encrypted = encrypt(body.openai_key.strip())
     await db.set_openai_key(user_id, encrypted)
+    logger.info("Setup keys saved: user_id=%s", user_id)
     return {"status": "saved"}
 
 
@@ -123,26 +134,40 @@ async def save_keys(body: KeysRequest, request: Request) -> dict[str, str]:
 async def setup_status(request: Request) -> dict[str, Any]:
     """Returns whether this user has completed setup."""
     user_id = get_user_id(request)
-    has_key = False
-    user = await db.get_user_by_github_id(
-        # look up by user_id indirectly via the request state
-        request.state.__dict__.get("user_id", user_id)
-    )
-    if user:
-        has_key = bool(user.get("openai_key_enc"))
+    server_has_key = bool(os.environ.get("OPENAI_API_KEY", "").strip())
+    user = await db.get_user_by_id(user_id)
+    has_key = server_has_key or bool(user and user.get("openai_key_enc"))
     configured = has_key and await db.has_projects(user_id)
-    return {"configured": configured, "has_openai_key": has_key}
+    logger.info(
+        "Setup status: user_id=%s server_has_openai_key=%s user_has_openai_key=%s configured=%s",
+        user_id,
+        server_has_key,
+        bool(user and user.get("openai_key_enc")),
+        configured,
+    )
+    return {
+        "configured": configured,
+        "has_openai_key": has_key,
+        "server_has_openai_key": server_has_key,
+    }
 
 
 @router.get("/repos")
 async def list_repos(request: Request) -> dict[str, Any]:
     """Fetch the authenticated user's GitHub repos using their OAuth token."""
-    get_user_id(request)
+    user_id = get_user_id(request)
+    logger.info("Setup repos requested: user_id=%s", user_id)
     token = get_github_token(request)
     headers = _github_headers(token)
 
     user_r = requests.get("https://api.github.com/user", headers=headers, timeout=10)
     if user_r.status_code != 200:
+        logger.warning(
+            "Setup repos GitHub user fetch failed: user_id=%s status=%s body=%s",
+            user_id,
+            user_r.status_code,
+            user_r.text[:200],
+        )
         return {"error": f"GitHub auth failed ({user_r.status_code})", "repos": []}
     user = user_r.json()
 
@@ -155,6 +180,13 @@ async def list_repos(request: Request) -> dict[str, Any]:
             timeout=10,
         )
         if r.status_code != 200:
+            logger.warning(
+                "Setup repos page fetch failed: user_id=%s page=%s status=%s body=%s",
+                user_id,
+                page,
+                r.status_code,
+                r.text[:200],
+            )
             break
         batch = r.json()
         if not batch:
@@ -164,6 +196,12 @@ async def list_repos(request: Request) -> dict[str, Any]:
             break
         page += 1
 
+    logger.info(
+        "Setup repos fetched: user_id=%s github_login=%s repo_count=%s",
+        user_id,
+        user.get("login", ""),
+        len(repos),
+    )
     return {
         "user": {"login": user["login"], "name": user.get("name", "")},
         "repos": [

@@ -1,41 +1,24 @@
-import pytest
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+import asyncio
+from unittest.mock import patch, AsyncMock, MagicMock
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'backend', 'data')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-
-def test_load_markdown_files():
-    from rag.loader import load_documents
-    docs = load_documents(DATA_DIR)
-    assert len(docs) >= 2
-    assert all(hasattr(d, 'page_content') for d in docs)
-    assert all(len(d.page_content) > 0 for d in docs)
+from rag import retriever
 
 
-def test_loaded_docs_have_source_metadata():
-    from rag.loader import load_documents
-    docs = load_documents(DATA_DIR)
-    assert all('source' in d.metadata for d in docs)
+def test_retrieve_returns_content_strings():
+    fake_embeddings = MagicMock()
+    fake_embeddings.aembed_query = AsyncMock(return_value=[0.0] * 1536)
 
+    async def run():
+        with patch("rag.retriever._embeddings", fake_embeddings), \
+             patch("rag.retriever.db.similarity_search", new=AsyncMock(return_value=[
+                 {"content": "chunk A", "source": "readme", "project_id": "p", "score": 0.9},
+                 {"content": "chunk B", "source": "readme", "project_id": "p", "score": 0.8},
+             ])):
+            return await retriever.retrieve(user_id="u", query="deadlines", k=2)
 
-def test_chunk_documents():
-    from rag.loader import load_documents
-    from rag.chunker import chunk_documents
-    docs = load_documents(DATA_DIR)
-    chunks = chunk_documents(docs)
-    assert len(chunks) >= len(docs)
-    assert all(len(c.page_content) <= 600 for c in chunks)
-
-
-def test_retriever_returns_relevant_chunks(tmp_path):
-    from rag.loader import load_documents
-    from rag.chunker import chunk_documents
-    from rag.retriever import build_retriever
-    docs = load_documents(DATA_DIR)
-    chunks = chunk_documents(docs)
-    retriever = build_retriever(chunks, persist_dir=str(tmp_path))
-    results = retriever.invoke("What are the deadlines for Project Alpha?")
-    assert len(results) >= 1
-    assert any("Alpha" in r.page_content or "milestone" in r.page_content.lower() or "deadline" in r.page_content.lower() for r in results)
+    chunks = asyncio.run(run())
+    assert chunks == ["chunk A", "chunk B"]

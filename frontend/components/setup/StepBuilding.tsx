@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ProjectConfig } from "./types";
+import { CheckIcon, AlertIcon } from "@/components/icons";
 
 const BACKEND = "/api/backend";
 
@@ -86,40 +87,42 @@ export default function StepBuilding({ projects, token, onComplete }: Props) {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">
-        {done ? "Setup Complete" : "Building Knowledge Base..."}
+      <h2 className="font-display text-lg text-ink mb-1 flex items-center gap-2">
+        {done && <CheckIcon className="w-4 h-4 text-moss" />}
+        {done ? "Compounded" : "Compounding the Shelf…"}
       </h2>
-      <p className="text-sm text-gray-500 mb-4">
+      <p className="text-sm text-ink-soft mb-4">
         {done
-          ? "Your projects have been indexed. The AI is ready."
+          ? "Your projects have been indexed. Keystone is ready."
           : "Fetching READMEs, seeding the database, and building the vector index."}
       </p>
 
-      <div className="bg-gray-950 rounded-lg p-4 h-56 overflow-y-auto font-mono text-xs mb-4">
+      <div className="bg-ink rounded-sm p-4 h-56 overflow-y-auto font-mono text-xs mb-4">
         {log.map((line, i) => (
-          <div key={i} className={`mb-1 ${line.done ? "text-green-400" : "text-gray-300"}`}>
-            <span className="text-gray-600 mr-2">›</span>
+          <div key={i} className={`mb-1 ${line.done ? "text-amber-glow" : "text-surface/70"}`}>
+            <span className="text-brass mr-2">›</span>
             {line.text}
           </div>
         ))}
         {!done && !error && (
-          <div className="text-gray-500 animate-pulse">working...</div>
+          <div className="text-surface/50 animate-pulse">measuring...</div>
         )}
         <div ref={bottomRef} />
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
-          Error: {error}
+        <div className="bg-carmine-bg border border-carmine/30 rounded-sm p-3 mb-4 text-sm text-carmine flex items-center gap-2">
+          <AlertIcon className="w-4 h-4 flex-shrink-0" />
+          {error}
         </div>
       )}
 
       <button
         disabled={!done}
         onClick={onComplete}
-        className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-40 transition-colors"
+        className="w-full py-2.5 bg-amber text-surface rounded-sm text-sm font-medium hover:bg-amber-deep disabled:opacity-40 transition-colors"
       >
-        Open the assistant
+        Open the counter
       </button>
     </div>
   );

@@ -1,16 +1,13 @@
 import requests
-from mcp.s3_fs import filesystem_read, filesystem_write, filesystem_list
+from mcp.s3_fs import filesystem_write
 
-# Re-export S3-backed filesystem MCP tools under the original names.
+# Re-export S3-backed filesystem MCP tool under the original name.
 # Callers must now pass user_id as the first argument.
 
 __all__ = [
-    "filesystem_read",
     "filesystem_write",
-    "filesystem_list",
     "github_mcp_list_issues",
     "github_mcp_list_prs",
-    "MCP_TOOLS",
 ]
 
 
@@ -39,12 +36,3 @@ def github_mcp_list_prs(owner: str, repo: str, token: str = "") -> list[dict]:
         {"number": p["number"], "title": p["title"], "user": p["user"]["login"]}
         for p in r.json()
     ]
-
-
-MCP_TOOLS = {
-    "filesystem_read": filesystem_read,
-    "filesystem_write": filesystem_write,
-    "filesystem_list": filesystem_list,
-    "github_list_issues": github_mcp_list_issues,
-    "github_list_prs": github_mcp_list_prs,
-}

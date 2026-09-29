@@ -1,40 +1,22 @@
-import pytest
+"""The DB layer is thin asyncpg SQL. We assert the schema text is coherent
+rather than hitting a live Postgres, keeping the suite offline."""
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
-from db.sqlite import init_db, get_projects, get_milestones, add_note, get_notes
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-
-@pytest.fixture
-def db_path(tmp_path):
-    path = str(tmp_path / "test.db")
-    init_db(path)
-    return path
+from db import postgres as db
 
 
-def test_init_db_creates_tables(db_path):
-    projects = get_projects(db_path)
-    assert isinstance(projects, list)
+def test_schema_defines_core_tables():
+    sql = db.SCHEMA_SQL
+    for table in ("users", "projects", "milestones", "doc_chunks", "chat_messages", "files", "notes"):
+        assert f"CREATE TABLE IF NOT EXISTS {table}" in sql
 
 
-def test_get_projects_returns_seeded_data(db_path):
-    projects = get_projects(db_path)
-    assert len(projects) >= 1
-    assert "name" in projects[0]
-    assert "client" in projects[0]
+def test_schema_enables_pgvector():
+    assert 'CREATE EXTENSION IF NOT EXISTS "vector"' in db.SCHEMA_SQL
 
 
-def test_get_milestones_for_project(db_path):
-    projects = get_projects(db_path)
-    project_id = projects[0]["id"]
-    milestones = get_milestones(db_path, project_id)
-    assert isinstance(milestones, list)
-
-
-def test_add_and_get_note(db_path):
-    projects = get_projects(db_path)
-    project_id = projects[0]["id"]
-    add_note(db_path, project_id, "Test note content")
-    notes = get_notes(db_path, project_id)
-    assert any(n["content"] == "Test note content" for n in notes)
+def test_doc_chunks_embedding_dimension_is_1536():
+    assert "VECTOR(1536)" in db.SCHEMA_SQL

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useBackendToken } from "./useBackendToken";
 
 export type AgentEvent = {
   agent: string;
@@ -9,23 +9,38 @@ export type AgentEvent = {
 };
 
 export type Turn = {
+  id: string;
   userMessage: string;
   events: AgentEvent[];
+  source?: "chat" | "briefing" | "proposal";
 };
 
 export function useSSE() {
-  const { data: session } = useSession();
-  const token = (session as any)?.accessToken as string | undefined;
+  const { getToken } = useBackendToken();
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
+  const addTurn = useCallback((userMessage: string, source: Turn["source"] = "chat") => {
+    const id = crypto.randomUUID();
+    setTurns((prev) => [...prev, { id, userMessage, events: [], source }]);
+    return id;
+  }, []);
+
+  const replaceTurnEvents = useCallback((turnId: string, events: AgentEvent[]) => {
+    setTurns((prev) =>
+      prev.map((turn) => (turn.id === turnId ? { ...turn, events } : turn)),
+    );
+  }, []);
+
   const sendMessage = useCallback(async (message: string, sessionId: string) => {
     const turnIndex = turns.length;
-    setTurns((prev) => [...prev, { userMessage: message, events: [] }]);
+    const turnId = crypto.randomUUID();
+    setTurns((prev) => [...prev, { id: turnId, userMessage: message, events: [], source: "chat" }]);
     setIsStreaming(true);
 
     try {
+      const token = await getToken();
       const response = await fetch("/api/backend/chat", {
         method: "POST",
         headers: {
@@ -59,9 +74,11 @@ export function useSSE() {
               if (event.type !== "done") {
                 setTurns((prev) => {
                   const updated = [...prev];
+                  const currentTurn = updated[turnIndex];
+                  if (!currentTurn || currentTurn.id !== turnId) return prev;
                   updated[turnIndex] = {
-                    ...updated[turnIndex],
-                    events: [...updated[turnIndex].events, event],
+                    ...currentTurn,
+                    events: [...currentTurn.events, event],
                   };
                   return updated;
                 });
@@ -75,10 +92,12 @@ export function useSSE() {
     } catch {
       setTurns((prev) => {
         const updated = [...prev];
+        const currentTurn = updated[turnIndex];
+        if (!currentTurn || currentTurn.id !== turnId) return prev;
         updated[turnIndex] = {
-          ...updated[turnIndex],
+          ...currentTurn,
           events: [
-            ...updated[turnIndex].events,
+            ...currentTurn.events,
             { agent: "system", type: "error", content: "Connection failed. Is the backend running?" },
           ],
         };
@@ -87,7 +106,7 @@ export function useSSE() {
     } finally {
       setIsStreaming(false);
     }
-  }, [turns.length, token]);
+  }, [turns.length, getToken]);
 
-  return { turns, isStreaming, sendMessage };
+  return { turns, isStreaming, sendMessage, addTurn, replaceTurnEvents };
 }

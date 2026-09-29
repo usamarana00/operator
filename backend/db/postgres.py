@@ -139,7 +139,7 @@ async def upsert_user(
               SET github_login = EXCLUDED.github_login,
                   email = EXCLUDED.email,
                   github_token_enc = COALESCE(EXCLUDED.github_token_enc, users.github_token_enc)
-            RETURNING id, github_id, github_login, email, openai_key_enc, created_at
+            RETURNING id, github_id, github_login, email, github_token_enc, openai_key_enc, created_at
             """,
             github_id, github_login, email, github_token_enc,
         )
@@ -150,6 +150,14 @@ async def get_user_by_github_id(github_id: str) -> dict[str, Any] | None:
     async with acquire() as conn:
         row = await conn.fetchrow(
             "SELECT * FROM users WHERE github_id = $1", github_id
+        )
+        return dict(row) if row else None
+
+
+async def get_user_by_id(user_id: str) -> dict[str, Any] | None:
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM users WHERE id = $1", user_id
         )
         return dict(row) if row else None
 

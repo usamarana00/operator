@@ -1,9 +1,12 @@
 import os
 import requests
+from mcp.servers import github_mcp_list_prs, github_mcp_list_issues
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
+
+from utils.history import format_history
 
 load_dotenv()
 
@@ -47,8 +50,8 @@ def _fetch_github_data(owner: str, repo: str, github_token: str) -> str:
         return r.json() if r.status_code == 200 else []
 
     commits = get(f"{base}/commits?per_page=5")
-    prs = get(f"{base}/pulls?state=open&per_page=5")
-    issues = get(f"{base}/issues?state=open&per_page=5")
+    prs = github_mcp_list_prs(owner, repo, token=github_token)
+    issues = github_mcp_list_issues(owner, repo, token=github_token)
 
     lines = [f"Repository: {owner}/{repo}"]
 
@@ -61,13 +64,11 @@ def _fetch_github_data(owner: str, repo: str, github_token: str) -> str:
 
     lines.append("\nOpen Pull Requests:")
     for pr in prs[:5]:
-        if isinstance(pr, dict):
-            lines.append(f"  - #{pr.get('number')} {pr.get('title')}")
+        lines.append(f"  - #{pr['number']} {pr['title']}")
 
     lines.append("\nOpen Issues:")
     for issue in issues[:5]:
-        if isinstance(issue, dict) and "pull_request" not in issue:
-            lines.append(f"  - #{issue.get('number')} {issue.get('title')}")
+        lines.append(f"  - #{issue['number']} {issue['title']}")
 
     return "\n".join(lines)
 
@@ -102,14 +103,10 @@ def run_github_agent(
         else "N/A"
     )
 
-    history_str = "\n".join(
-        f"{'Human' if m.type == 'human' else 'AI'}: {m.content}" for m in history
-    )
-
     response = (_PROMPT | _llm).invoke({
         "message": message,
         "github_data": github_data,
         "search_results": search_results,
-        "history": history_str,
+        "history": format_history(history),
     })
     return response.content

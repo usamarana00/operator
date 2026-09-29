@@ -1,27 +1,132 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/*
+  Keystone runs one deliberately-lit world: a sunlit apothecary counter.
+  No prefers-color-scheme branch — the scene (a shop with amber glass and
+  morning light) doesn't have a "dark mode," it has after-hours, and that's
+  a future signature moment, not a media query.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ground: #f3eee2;
+  --surface: #fbf7ec;
+  --surface-recessed: #e9dfc9;
+  --ink: #2b2420;
+  --ink-soft: #5c4f40;
+  --line: #d8c9a6;
+
+  --brass: #8c7a4e;
+  --brass-dark: #6b5a35;
+
+  --amber: #a9631e;
+  --amber-deep: #7a4416;
+  --amber-glow: #eab35c;
+
+  --moss: #55663f;
+  --moss-bg: #e2e8d1;
+
+  --carmine: #99331f;
+  --carmine-bg: #f2ddd3;
+
+  --dust: #5f5240;
+  --dust-bg: #e8e1d1;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-recessed: var(--surface-recessed);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-brass: var(--brass);
+  --color-brass-dark: var(--brass-dark);
+
+  --color-amber: var(--amber);
+  --color-amber-deep: var(--amber-deep);
+  --color-amber-glow: var(--amber-glow);
+
+  --color-moss: var(--moss);
+  --color-moss-bg: var(--moss-bg);
+
+  --color-carmine: var(--carmine);
+  --color-carmine-bg: var(--carmine-bg);
+
+  --color-dust: var(--dust);
+  --color-dust-bg: var(--dust-bg);
+
+  --font-display: var(--font-old-standard);
+  --font-sans: var(--font-public-sans);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--amber-glow);
+  color: var(--ink);
+}
+
+* {
+  scrollbar-color: var(--brass) var(--surface-recessed);
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-recessed);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brass);
+  border-radius: 999px;
+  border: 2px solid var(--surface-recessed);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brass-dark);
+}
+
+input,
+textarea,
+button {
+  caret-color: var(--amber-deep);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--amber-glow);
+  border-radius: 3px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The compounding pour — the app's one signature moment. See AgentMessage. */
+@keyframes pour {
+  0% {
+    transform: scaleY(0);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes settle {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

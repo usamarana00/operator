@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from db import postgres as db
 from rag.retriever import retrieve
+from utils.history import format_history
 
 load_dotenv()
 
@@ -48,14 +49,10 @@ async def run_pm_agent(
         for m in milestones
     ) or "No milestones found."
 
-    history_str = "\n".join(
-        f"{'Human' if m.type == 'human' else 'AI'}: {m.content}" for m in history
-    )
-
     response = (_PROMPT | _llm).invoke({
         "message": message,
         "context": context,
         "milestones": milestones_str,
-        "history": history_str,
+        "history": format_history(history),
     })
     return response.content
