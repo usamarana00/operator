@@ -47,7 +47,7 @@ export default function ChatWindow({
         <JarMark className="w-5 h-6 text-amber flex-shrink-0" />
         <div>
           <h1 className="font-display text-lg text-ink leading-tight">Keystone</h1>
-          <p className="text-xs text-ink-soft">Multi-agent AI · LangGraph · RAG · GPT-4o</p>
+          <p className="text-xs text-ink-soft">Multi-agent AI · LangChain · RAG · GPT-4o</p>
         </div>
       </header>
 
