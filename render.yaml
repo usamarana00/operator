@@ -23,8 +23,8 @@ services:
       - key: AWS_REGION
         sync: false
       - key: AWS_S3_BUCKET
-        value: false
+        sync: false
       - key: TAVILY_API_KEY
         sync: false
       - key: OPENAI_API_KEY
-        sync: false          # fallback for server-side build step only
+        sync: false          # required: used by all agents

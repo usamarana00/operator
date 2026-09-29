@@ -1,8 +1,8 @@
-# Freelance Project Assistant
+# Keystone
 
 A multi-agent AI system that helps freelance developers manage projects, track deadlines, and monitor GitHub repositories — all through a natural language chat interface.
 
-Built as a capstone project for an AI engineering bootcamp, demonstrating LangChain, LangGraph, RAG, MCP, and SSE streaming in a production-style full-stack application.
+Built as a capstone project for an AI engineering bootcamp, demonstrating LangChain, RAG over pgvector, MCP-style tool functions, and SSE streaming in a full-stack application.
 
 ---
 
@@ -45,8 +45,8 @@ The system routes your question to the right agents, queries the right data sour
 │   │ /status  │    │  └────┬────┘ → deadline/repo/both/   │  │
 │   │ /repos   │    │       │        general               │  │
 │   │ /complete│    │  ┌────▼──────────────┐               │  │
-│   └──────────┘    │  │  Conditional      │               │  │
-│                   │  │  Router           │               │  │
+│   └──────────┘    │  │  if/else on       │               │  │
+│                   │  │  intent (main.py) │               │  │
 │                   │  └──┬────────────┬───┘               │  │
 │                   │     │            │                   │  │
 │              ┌────▼───┐ │      ┌─────▼──────┐            │  │
@@ -55,7 +55,7 @@ The system routes your question to the right agents, queries the right data sour
 │              │RAG     │ │      │GitHub API  │            │  │
 │              │pgvector│ │      │Tavily      │            │  │
 │              │Postgres│ │      │            │            │  │
-│              │MCP S3FS│ │      │MCP GitHub  │            │  │
+│              │S3 notes│ │      │            │            │  │
 │              └────┬───┘ │      └─────┬──────┘            │  │
 │                   │     │            │                   │  │
 │              ┌────▼─────▼────────────▼───┐               │  │
@@ -71,13 +71,15 @@ The system routes your question to the right agents, queries the right data sour
 | Agent | Trigger | Data sources |
 |-------|---------|-------------|
 | **Planner** | Every request | LLM (GPT-4o) — classifies intent + extracts entities |
-| **PM Agent** | `deadline` or `both` intent | Postgres pgvector (RAG), Postgres (milestones), S3 filesystem MCP |
+| **PM Agent** | `deadline` or `both` intent | Postgres pgvector (RAG), Postgres (milestones); query log written to S3 afterwards |
 | **GitHub Agent** | `repo` or `both` intent | GitHub REST API, Tavily web search |
 | **Response Agent** | Always | Synthesizes PM + GitHub outputs into final Markdown |
 
+The pipeline is a plain async generator (`_stream` in `backend/main.py`) that branches on the planner's intent. There is no LangGraph graph; `backend/graph/workflow.py` only holds the repo-URL resolver.
+
 ### SSE streaming
 
-Every agent step emits a Server-Sent Event to the browser as it happens — intent classification, RAG retrieval counts, Postgres query results, GitHub API calls, MCP writes, and the final synthesized response all appear in real time.
+Each pipeline step yields a Server-Sent Event (`{agent, type, content}`) as it runs: intent classification, milestone query counts, the S3 notes write, GitHub fetches, and the final synthesized response.
 
 ---
 
@@ -85,18 +87,29 @@ Every agent step emits a Server-Sent Event to the browser as it happens — inte
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS v4 |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
 | Backend | FastAPI, Python 3.11, Uvicorn |
-| Agent framework | LangChain, LangGraph |
-| LLM | GPT-4o (OpenAI) |
+| Agent framework | LangChain (LCEL `prompt \| llm` chains) |
+| LLM | GPT-4o (OpenAI), via the server's `OPENAI_API_KEY` |
 | Vector store | Neon Postgres + pgvector + OpenAI text-embedding-3-small |
 | Structured data | Neon Postgres (asyncpg) |
 | Memory | Postgres-backed chat history per session |
-| Auth | NextAuth (GitHub OAuth) → JWT verified by FastAPI middleware |
+| Auth | NextAuth (GitHub OAuth) → short-lived HS256 JWT from `/api/backend-token`, verified by FastAPI middleware |
 | File storage | AWS S3 (presigned uploads) + S3-backed notes MCP |
 | External APIs | GitHub REST API, Tavily Search |
-| MCP tools | S3-backed filesystem MCP, GitHub MCP |
+| Tool layer | MCP-style Python functions: S3 notes write (`mcp/s3_fs.py`), GitHub issues/PRs (`mcp/servers.py`) — not MCP-protocol servers |
 | Streaming | Server-Sent Events (SSE) |
+
+---
+
+## Auth flow
+
+1. User signs in with GitHub through NextAuth (scopes `repo read:user user:email`). The GitHub access token stays in the NextAuth JWT cookie and is **not** exposed in the client session.
+2. The browser calls `GET /api/backend-token` (`frontend/app/api/backend-token/route.ts`), which mints a 5-minute HS256 JWT signed with `NEXTAUTH_SECRET` carrying `sub`, `github_login`, `email`, `github_token`.
+3. `useBackendToken` caches that token client-side and refreshes it 30 s before expiry; API calls send it as `Authorization: Bearer <jwt>`.
+4. `AuthMiddleware` (`backend/auth.py`) verifies the JWT with the same secret, upserts the user, and stores the GitHub token Fernet-encrypted (`APP_ENCRYPTION_KEY`). As a fallback it also accepts a raw GitHub token and validates it against `GET https://api.github.com/user`.
+
+`NEXTAUTH_SECRET` must be identical on frontend and backend.
 
 ---
 
@@ -112,12 +125,13 @@ Postgres + pgvector (Docker), S3 (LocalStack), FastAPI, and Next.js with GitHub 
 
 ### 1. Start Postgres + LocalStack
 ```bash
-docker compose up -d
+docker compose up -d db localstack
 ```
+(Plain `docker compose up -d` also builds and starts the backend and frontend containers — see [Full stack in Docker](#full-stack-in-docker).)
 
 ### 2. Backend env + run
 ```bash
-cp backend/.env.example backend/.env   # fill NEON_DATABASE_URL (local), APP_ENCRYPTION_KEY, NEXTAUTH_SECRET, OPENAI_API_KEY, AWS_* (LocalStack)
+cp backend/.env.example backend/.env   # fill NEON_DATABASE_URL (local), APP_ENCRYPTION_KEY, NEXTAUTH_SECRET, OPENAI_API_KEY, AWS_* + AWS_ENDPOINT_URL (LocalStack)
 uv sync
 uv run uvicorn backend.main:app --reload     # http://localhost:8000
 ```
@@ -134,14 +148,23 @@ cd frontend && npm install && npm run dev             # http://localhost:3000
 ```
 
 ### 4. Sign in + complete the wizard
-Open http://localhost:3000, sign in with GitHub, then the 4-step wizard: confirm OpenAI key → pick repos → name projects + milestones → build (fetches READMEs/commits, seeds Postgres, indexes pgvector).
+Open http://localhost:3000, sign in with GitHub, then the 4-step wizard: OpenAI key → pick repos → name projects + milestones → build (fetches READMEs/commits, seeds Postgres, indexes pgvector).
+
+> The key entered in the wizard is stored encrypted per user, but the agents currently call OpenAI with the server's `OPENAI_API_KEY`, so the server key is required.
+
+### Full stack in Docker
+
+`docker-compose.yml` defines `db`, `localstack`, `backend` (`backend/Dockerfile`) and `frontend` (`frontend/Dockerfile`). The backend reads the repo-root `.env`, the frontend reads `frontend/.env.local`; compose overrides the database URL, S3 endpoint/credentials and `BACKEND_URL` so the containers talk to each other.
+```bash
+docker compose up -d --build
+```
 
 ---
 
 ## Project structure
 
 ```
-freelance-agent/
+keystone/
 ├── backend/
 │   ├── main.py                  # FastAPI app, SSE chat endpoint
 │   ├── auth.py                  # NextAuth JWT verification + GitHub OAuth + Fernet encryption
@@ -155,15 +178,17 @@ freelance-agent/
 │   ├── db/
 │   │   └── postgres.py          # asyncpg pool + schema (users, projects, milestones,
 │   │                             #   notes, files, doc_chunks/pgvector, chat_messages)
+│   ├── Dockerfile
 │   ├── graph/
-│   │   ├── state.py             # LangGraph AgentState TypedDict
-│   │   └── workflow.py          # LangGraph StateGraph workflow
+│   │   └── workflow.py          # _resolve_repo_url() — picks the repo for the GitHub agent
 │   ├── mcp/
-│   │   ├── s3_fs.py             # S3-backed filesystem MCP + presigned upload/download
-│   │   └── servers.py           # Re-exports S3 MCP tools + GitHub MCP tool wrappers
+│   │   ├── s3_fs.py             # S3 notes write + presigned upload/download
+│   │   └── servers.py           # Re-exports filesystem_write + GitHub issues/PRs helpers
 │   ├── memory/
-│   │   ├── buffer_memory.py     # Per-session chat history backed by Postgres
-│   │   └── vector_memory.py     # Long-term memory embedded into pgvector
+│   │   └── buffer_memory.py     # Per-session chat history backed by Postgres
+│   ├── utils/
+│   │   ├── history.py           # format_history() shared by the agents
+│   │   └── project_context.py
 │   ├── rag/
 │   │   ├── loader.py            # Document loading for project docs
 │   │   ├── chunker.py           # RecursiveCharacterTextSplitter
@@ -174,9 +199,12 @@ freelance-agent/
 │       ├── proposal.py          # POST /proposal, GET /proposal/{session_id}/pdf
 │       └── files.py             # Presigned S3 upload/download + file metadata
 ├── frontend/
+│   ├── Dockerfile
+│   ├── middleware.ts            # Redirects unauthenticated requests to /
 │   ├── app/
 │   │   ├── page.tsx             # Root — setup wizard or main chat
 │   │   ├── api/auth/[...nextauth]/route.ts  # NextAuth GitHub OAuth route
+│   │   ├── api/backend-token/route.ts       # Mints the short-lived backend JWT
 │   │   └── globals.css          # Tailwind v4 + typography plugin
 │   ├── components/
 │   │   ├── setup/               # 4-step onboarding wizard
@@ -193,18 +221,22 @@ freelance-agent/
 │   │   ├── ProposalWizard.tsx   # Proposal generator form
 │   │   ├── ProposalDownload.tsx # PDF download for a generated proposal
 │   │   ├── FileUpload.tsx       # Presigned S3 file upload
-│   │   └── SignIn.tsx           # GitHub OAuth sign-in
+│   │   ├── SignIn.tsx           # GitHub OAuth sign-in
+│   │   ├── UserMenu.tsx
+│   │   └── icons.tsx
 │   └── lib/
-│       └── useSSE.ts            # SSE streaming hook with turn history
+│       ├── useSSE.ts            # SSE streaming hook with turn history
+│       └── useBackendToken.ts   # Fetches + caches the backend JWT
 └── tests/
-    ├── test_db.py
-    ├── test_rag.py
     ├── test_agents.py
-    ├── test_workflow.py
-    ├── test_routing.py
-    ├── test_repo_resolution.py
+    ├── test_auth.py
+    ├── test_db.py
     ├── test_github_mcp_usage.py
-    └── test_productivity_routes.py
+    ├── test_import_consistency.py
+    ├── test_productivity_routes.py
+    ├── test_proposal_pdf.py
+    ├── test_rag.py
+    └── test_repo_resolution.py
 ```
 
 ---
@@ -222,8 +254,9 @@ Setup state lives in Postgres per user, not in local files. To reconfigure, eith
 ## Running tests
 
 ```bash
-uv run pytest tests/ -v
+OPENAI_API_KEY=sk-test-dummy uv run pytest tests/ -v
 ```
+Tests run offline (LLM, DB and HTTP calls are mocked); a dummy key is enough. CI (`.github/workflows/ci.yml`) runs the same command plus `npx tsc --noEmit` on the frontend.
 
 ---
 
@@ -235,8 +268,8 @@ uv run pytest tests/ -v
 | Conversation memory | Postgres-backed chat history per session in `buffer_memory.py` |
 | RAG pipeline | Postgres pgvector (`doc_chunks` table) + OpenAI embeddings, chunking |
 | 3+ agents | Planner, PM Agent, GitHub Agent, Response Agent, Producer Agent |
-| LangGraph workflow | `StateGraph` with conditional routing in `graph/workflow.py`, executed by the chat pipeline |
-| 2+ MCP servers | S3-backed filesystem MCP (`mcp/s3_fs.py`) + GitHub MCP tool layer (`mcp/servers.py`, used by the GitHub agent) |
+| Multi-step workflow | Intent-routed pipeline in `main.py::_stream` (plain Python branching; LangGraph was removed) |
+| Tool layer | MCP-style functions for S3 notes (`mcp/s3_fs.py`) and GitHub issues/PRs (`mcp/servers.py`). In-process Python calls, not MCP-protocol servers. |
 | 2+ external APIs | GitHub REST API + Tavily Search API |
 | 2+ data sources | Postgres (structured) + pgvector (RAG) + GitHub REST API (live) |
 
@@ -275,9 +308,9 @@ Copy the **pooler connection string** (postgres://...).
 
 **4. Generate secrets**
 ```bash
-# NEXTAUTH_SECRET and APP_ENCRYPTION_KEY
+# NEXTAUTH_SECRET
 python -c "import secrets; print(secrets.token_urlsafe(32))"
-# APP_ENCRYPTION_KEY must be a valid Fernet key:
+# APP_ENCRYPTION_KEY (must be a valid Fernet key)
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
@@ -292,7 +325,7 @@ AWS_SECRET_ACCESS_KEY  = <from IAM>
 AWS_REGION             = us-east-1
 AWS_S3_BUCKET          = freelance-agent-prod
 TAVILY_API_KEY         = <optional>
-OPENAI_API_KEY         = <optional fallback>
+OPENAI_API_KEY         = <required — used by all agents>
 ```
 
 **6. Vercel — set env vars** (Settings → Environment Variables)
