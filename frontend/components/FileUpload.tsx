@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useBackendToken } from "@/lib/useBackendToken";
+import { UploadIcon, CheckIcon, AlertIcon } from "./icons";
 
 interface Props {
   projectId: string;
@@ -12,15 +13,14 @@ type UploadState = "idle" | "uploading" | "done" | "error";
 const BACKEND = "/api/backend";
 
 export default function FileUpload({ projectId, onUploaded }: Props) {
-  const { data: session } = useSession();
+  const { getToken } = useBackendToken();
   const [state, setState] = useState<UploadState>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const token = (session as any)?.accessToken as string | undefined;
-
   async function upload(file: File) {
+    const token = await getToken();
     if (!token) return;
     setState("uploading");
     setProgress(0);
@@ -101,8 +101,8 @@ export default function FileUpload({ projectId, onUploaded }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <label
-        className={`flex items-center gap-2 cursor-pointer border-2 border-dashed rounded-xl px-4 py-3 text-sm transition-colors
-          ${state === "uploading" ? "border-blue-300 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}
+        className={`flex items-center gap-2 cursor-pointer border-2 border-dashed rounded-sm px-4 py-3 text-sm transition-colors
+          ${state === "uploading" ? "border-amber/50 bg-amber-glow/10" : "border-brass/40 hover:border-brass bg-surface"}`}
       >
         <input
           ref={inputRef}
@@ -113,34 +113,34 @@ export default function FileUpload({ projectId, onUploaded }: Props) {
         />
         {state === "idle" && (
           <>
-            <span className="text-gray-400">📎</span>
-            <span className="text-gray-500">Attach a file</span>
+            <UploadIcon className="w-4 h-4 text-ink-soft" />
+            <span className="text-ink-soft">Attach a file</span>
           </>
         )}
         {state === "uploading" && (
           <>
-            <span className="text-blue-500">⬆</span>
-            <span className="text-blue-600">Uploading… {progress}%</span>
+            <UploadIcon className="w-4 h-4 text-amber-deep animate-pulse" />
+            <span className="text-amber-deep tabular">Uploading… {progress}%</span>
           </>
         )}
         {state === "done" && (
           <>
-            <span className="text-green-500">✓</span>
-            <span className="text-green-600">Uploaded</span>
+            <CheckIcon className="w-4 h-4 text-moss" />
+            <span className="text-moss">Uploaded</span>
           </>
         )}
         {state === "error" && (
           <>
-            <span className="text-red-500">✕</span>
-            <span className="text-red-600 truncate">{error}</span>
+            <AlertIcon className="w-4 h-4 text-carmine" />
+            <span className="text-carmine truncate">{error}</span>
           </>
         )}
       </label>
 
       {state === "uploading" && (
-        <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-1 w-full bg-surface-recessed rounded-full overflow-hidden">
           <div
-            className="h-full bg-blue-400 transition-all duration-200"
+            className="h-full bg-amber transition-all duration-200"
             style={{ width: `${progress}%` }}
           />
         </div>

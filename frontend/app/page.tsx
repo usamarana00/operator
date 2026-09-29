@@ -6,11 +6,14 @@ import ChatWindow from "@/components/ChatWindow";
 import SetupWizard from "@/components/setup/SetupWizard";
 import SignIn from "@/components/SignIn";
 import { AgentEvent, useSSE } from "@/lib/useSSE";
+import { useBackendToken } from "@/lib/useBackendToken";
+import { JarMark } from "@/components/icons";
 
 type AppState = "loading" | "signin" | "setup" | "ready";
 
 export default function Home() {
   const { data: session, status } = useSession();
+  const { getToken } = useBackendToken();
   const [appState, setAppState] = useState<AppState>("loading");
   const [proposalSessionId, setProposalSessionId] = useState("");
   const { turns, isStreaming, sendMessage, addTurn, replaceTurnEvents } = useSSE();
@@ -25,22 +28,22 @@ export default function Home() {
       return;
     }
 
-    const token = (session as any).accessToken as string | undefined;
-
-    fetch("/api/backend/setup/status", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((r) => r.json())
-      .then((data) => setAppState(data.configured ? "ready" : "setup"))
-      .catch(() => setAppState("setup"));
-  }, [session, status]);
+    getToken().then((token) => {
+      fetch("/api/backend/setup/status", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((data) => setAppState(data.configured ? "ready" : "setup"))
+        .catch(() => setAppState("setup"));
+    });
+  }, [session, status, getToken]);
 
   if (appState === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center text-gray-400">
-          <div className="text-3xl mb-3 animate-pulse">🤖</div>
-          <p className="text-sm">Starting...</p>
+      <div className="min-h-screen flex items-center justify-center bg-ground">
+        <div className="text-center text-ink-soft">
+          <JarMark className="w-6 h-7 mx-auto mb-3 text-brass/60 animate-pulse" />
+          <p className="text-sm font-display">Opening the shop…</p>
         </div>
       </div>
     );
@@ -84,7 +87,7 @@ export default function Home() {
   };
 
   return (
-    <main className="flex h-screen overflow-hidden bg-white">
+    <main className="flex flex-col md:flex-row h-screen overflow-hidden bg-ground">
       <Sidebar
         onBriefingStream={(raw) => injectSSEStream("briefing", raw)}
         onProposalStream={(raw) => injectSSEStream("proposal", raw)}

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { CheckIcon } from "@/components/icons";
 
 const BACKEND = "/api/backend";
 
@@ -106,21 +107,21 @@ export default function StepValidate({ token, onNext }: Props) {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">Add your OpenAI key</h2>
-      <p className="text-sm text-gray-500 mb-6">
-        Your GitHub account is already connected. You can add an OpenAI API key now
-        or continue with the server configuration.
+      <h2 className="font-display text-lg text-ink mb-1">Unlock the Cabinet</h2>
+      <p className="text-sm text-ink-soft mb-6">
+        Your GitHub account is already connected. Add an OpenAI API key now, or
+        continue with the server's own key.
       </p>
 
       {checking && (
-        <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
+        <div className="text-sm text-ink-soft bg-ground border border-brass/30 rounded-sm px-3 py-2 mb-4">
           Checking existing configuration...
         </div>
       )}
 
       <div className="mb-4">
-        <label className="block text-xs font-medium text-gray-600 mb-1.5">
-          OpenAI API Key <span className="font-normal text-gray-400">(optional)</span>
+        <label className="block text-xs font-medium text-ink-soft mb-1.5">
+          OpenAI API Key <span className="font-normal text-ink-soft/60">(optional)</span>
         </label>
         <input
           type="password"
@@ -131,26 +132,26 @@ export default function StepValidate({ token, onNext }: Props) {
             setSaved(false);
             setError("");
           }}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono text-gray-950 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-brass/40 bg-ground rounded-sm px-3 py-2.5 text-sm font-mono text-ink placeholder:text-ink-soft/50 focus:outline-none focus-visible:border-amber-deep"
         />
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-ink-soft/70 mt-1">
           Get yours at{" "}
           <a
             href="https://platform.openai.com/api-keys"
             target="_blank"
             rel="noreferrer"
-            className="text-blue-500 underline"
+            className="text-amber-deep underline"
           >
             platform.openai.com/api-keys
           </a>
         </p>
       </div>
 
-      {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+      {error && <p className="text-xs text-carmine mb-3">{error}</p>}
 
       {saved && (
-        <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
-          <span>OK</span> Key saved securely
+        <div className="flex items-center gap-2 text-sm text-moss bg-moss-bg border border-moss/30 rounded-sm px-3 py-2 mb-4">
+          <CheckIcon className="w-4 h-4" /> Key saved securely
         </div>
       )}
 
@@ -158,16 +159,16 @@ export default function StepValidate({ token, onNext }: Props) {
         <button
           onClick={handleSave}
           disabled={saving || checking}
-          className="flex-1 py-2.5 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-40 transition-colors"
+          className="flex-1 py-2.5 bg-ink text-surface rounded-sm text-sm font-medium hover:bg-brass-dark disabled:opacity-40 transition-colors"
         >
           {saving ? "Saving..." : saved ? "Saved" : key.trim() ? "Save key" : "Skip for now"}
         </button>
         <button
           onClick={onNext}
           disabled={checking}
-          className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
+          className="flex-1 py-2.5 bg-amber text-surface rounded-sm text-sm font-medium hover:bg-amber-deep disabled:opacity-40 transition-colors"
         >
-          Next - Select repos
+          Next — Select repos
         </button>
       </div>
     </div>

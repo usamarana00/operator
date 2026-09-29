@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { useBackendToken } from "@/lib/useBackendToken";
+import { LabelIcon } from "./icons";
 
 interface ProposalDownloadProps {
   sessionId: string;
 }
 
 export default function ProposalDownload({ sessionId }: ProposalDownloadProps) {
-  const { data: session } = useSession();
-  const token = (session as any)?.accessToken as string | undefined;
+  const { getToken } = useBackendToken();
   const [loading, setLoading] = useState(false);
 
   const handleDownload = async () => {
@@ -17,6 +17,7 @@ export default function ProposalDownload({ sessionId }: ProposalDownloadProps) {
     setLoading(true);
 
     try {
+      const token = await getToken();
       const res = await fetch(`/api/backend/proposal/${sessionId}/pdf`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -47,10 +48,10 @@ export default function ProposalDownload({ sessionId }: ProposalDownloadProps) {
     <button
       onClick={handleDownload}
       disabled={loading}
-      className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900 hover:bg-gray-700 text-white transition-colors disabled:opacity-50"
+      className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-sm text-xs font-medium bg-ink hover:bg-amber-deep text-surface transition-colors disabled:opacity-50"
     >
-      <span>{loading ? "..." : "PDF"}</span>
-      <span>{loading ? "Generating PDF..." : "Download as PDF"}</span>
+      <LabelIcon className="w-3.5 h-3.5" />
+      <span>{loading ? "Sealing label..." : "Download as PDF"}</span>
     </button>
   );
 }

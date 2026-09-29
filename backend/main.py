@@ -39,7 +39,7 @@ from graph.workflow import _resolve_repo_url
 
 _FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 
-app = FastAPI(title="Freelance Agent API")
+app = FastAPI(title="Keystone API")
 
 app.add_middleware(
     CORSMiddleware,

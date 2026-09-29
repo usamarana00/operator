@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import type { Turn } from "@/lib/useSSE";
 import AgentMessage from "./AgentMessage";
 import ProposalDownload from "./ProposalDownload";
+import { JarMark } from "./icons";
 
 interface ChatWindowProps {
   turns: Turn[];
@@ -41,48 +42,43 @@ export default function ChatWindow({
   };
 
   return (
-    <div className="flex flex-col flex-1 h-screen overflow-hidden">
-      <header className="border-b border-gray-200 px-6 py-4 bg-white flex-shrink-0">
-        <h1 className="text-lg font-semibold text-gray-800">Freelance Project Assistant</h1>
-        <p className="text-xs text-gray-400">Multi-agent AI · LangGraph · RAG · GPT-4o</p>
+    <div className="flex flex-col flex-1 min-h-0 md:h-screen overflow-hidden bg-ground">
+      <header className="border-b border-brass/30 px-6 py-4 bg-surface flex-shrink-0 flex items-center gap-3">
+        <JarMark className="w-5 h-6 text-amber flex-shrink-0" />
+        <div>
+          <h1 className="font-display text-lg text-ink leading-tight">Keystone</h1>
+          <p className="text-xs text-ink-soft">Multi-agent AI · LangGraph · RAG · GPT-4o</p>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
         {turns.length === 0 && !isStreaming && (
-          <div className="text-center text-gray-400 text-sm mt-20 space-y-2">
-            <p className="text-2xl">🤖</p>
-            <p className="font-medium text-gray-500">What can I help you with?</p>
-            <div className="text-xs space-y-1 text-gray-400">
-              <p>&quot;What deadlines do I have this week?&quot;</p>
-              <p>&quot;Show me open PRs for Project Alpha&quot;</p>
-              <p>&quot;What&apos;s the status of Project Beta?&quot;</p>
+          <div className="text-center mt-20 max-w-md mx-auto">
+            <JarMark className="w-8 h-10 mx-auto mb-4 text-brass/60" />
+            <p className="font-display text-lg text-ink mb-4">What can I compound for you?</p>
+            <div className="text-sm space-y-2 text-ink-soft">
+              <p className="italic">&quot;What deadlines do I have this week?&quot;</p>
+              <p className="italic">&quot;Show me open PRs for Project Alpha&quot;</p>
+              <p className="italic">&quot;What&apos;s the status of Project Beta?&quot;</p>
             </div>
           </div>
         )}
 
         {turns.map((turn, i) => (
-          <div key={i} className="mb-6">
-            {/* User message bubble */}
+          <div key={i} className="mb-6 max-w-3xl mx-auto">
             <div className="flex justify-end mb-3">
-              <div className="bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 text-sm max-w-[75%]">
+              <div className="bg-ink text-surface rounded-sm px-4 py-2 text-sm max-w-[75%]">
                 {turn.userMessage}
               </div>
             </div>
 
-            {/* Agent events for this turn */}
             {turn.events.map((event, j) => (
               <div key={j}>
-                <AgentMessage
-                  agent={event.agent}
-                  type={event.type}
-                  content={event.content}
-                />
+                <AgentMessage agent={event.agent} type={event.type} content={event.content} />
                 {turn.source === "proposal" &&
                   event.agent === "producer" &&
                   event.type === "final" &&
-                  proposalSessionId && (
-                    <ProposalDownload sessionId={proposalSessionId} />
-                  )}
+                  proposalSessionId && <ProposalDownload sessionId={proposalSessionId} />}
               </div>
             ))}
           </div>
@@ -93,24 +89,26 @@ export default function ChatWindow({
 
       <form
         onSubmit={handleSubmit}
-        className="border-t border-gray-200 p-4 bg-white flex-shrink-0 flex gap-3 items-end"
+        className="border-t border-brass/30 p-4 bg-surface flex-shrink-0"
       >
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask about deadlines, repos, or project status... (Enter to send)"
-          rows={2}
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-          disabled={isStreaming}
-        />
-        <button
-          type="submit"
-          disabled={isStreaming || !input.trim()}
-          className="rounded-lg bg-blue-600 text-white px-5 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors h-[42px]"
-        >
-          {isStreaming ? "..." : "Send"}
-        </button>
+        <div className="max-w-3xl mx-auto flex gap-3 items-end">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about deadlines, repos, or project status… (Enter to send)"
+            rows={2}
+            className="flex-1 rounded-sm border border-brass/40 bg-ground px-4 py-2 text-sm text-ink placeholder:text-ink-soft/70 focus:outline-none resize-none"
+            disabled={isStreaming}
+          />
+          <button
+            type="submit"
+            disabled={isStreaming || !input.trim()}
+            className="rounded-sm bg-amber text-surface px-5 py-2 text-sm font-medium hover:bg-amber-deep disabled:opacity-40 disabled:hover:bg-amber transition-colors h-[42px]"
+          >
+            {isStreaming ? "Compounding…" : "Dispense"}
+          </button>
+        </div>
       </form>
     </div>
   );

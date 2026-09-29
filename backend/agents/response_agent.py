@@ -3,6 +3,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
 
+from utils.history import format_history
+
 load_dotenv()
 
 _llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
@@ -43,13 +45,10 @@ def run_response_agent(
     github_output: str,
     history: list[BaseMessage],
 ) -> str:
-    history_str = "\n".join(
-        f"{'Human' if m.type == 'human' else 'AI'}: {m.content}" for m in history
-    )
     response = (_PROMPT | _llm).invoke({
         "message": original_message,
         "pm_output": pm_output or "No project data retrieved.",
         "github_output": github_output or "No repository data retrieved.",
-        "history": history_str,
+        "history": format_history(history),
     })
     return response.content

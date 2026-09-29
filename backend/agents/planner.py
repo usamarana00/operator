@@ -5,6 +5,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
 
+from utils.history import format_history
+
 load_dotenv()
 
 _llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -41,10 +43,7 @@ Respond with raw JSON only — no markdown, no backticks:
 
 
 def classify_intent(message: str, history: list[BaseMessage]) -> dict:
-    history_str = "\n".join(
-        f"{'Human' if m.type == 'human' else 'AI'}: {m.content}" for m in history
-    )
-    response = (_PROMPT | _llm).invoke({"message": message, "history": history_str})
+    response = (_PROMPT | _llm).invoke({"message": message, "history": format_history(history)})
     content = response.content.strip()
 
     # Strip markdown code fences if present

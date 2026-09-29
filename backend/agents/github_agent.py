@@ -6,6 +6,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
 
+from utils.history import format_history
+
 load_dotenv()
 
 _llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -101,14 +103,10 @@ def run_github_agent(
         else "N/A"
     )
 
-    history_str = "\n".join(
-        f"{'Human' if m.type == 'human' else 'AI'}: {m.content}" for m in history
-    )
-
     response = (_PROMPT | _llm).invoke({
         "message": message,
         "github_data": github_data,
         "search_results": search_results,
-        "history": history_str,
+        "history": format_history(history),
     })
     return response.content

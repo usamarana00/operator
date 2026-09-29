@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { useBackendToken } from "@/lib/useBackendToken";
+import { SunriseIcon } from "./icons";
 
 interface BriefingButtonProps {
   onStream: (chunks: string) => void;
 }
 
 export default function BriefingButton({ onStream }: BriefingButtonProps) {
-  const { data: session } = useSession();
-  const token = (session as any)?.accessToken as string | undefined;
+  const { getToken } = useBackendToken();
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -18,6 +18,7 @@ export default function BriefingButton({ onStream }: BriefingButtonProps) {
 
     try {
       onStream("");
+      const token = await getToken();
       const res = await fetch("/api/backend/briefing", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -47,10 +48,10 @@ export default function BriefingButton({ onStream }: BriefingButtonProps) {
     <button
       onClick={handleClick}
       disabled={loading}
-      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-sm text-sm font-medium transition-colors text-ink-soft hover:text-ink hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <span>{loading ? "..." : "Sun"}</span>
-      <span>{loading ? "Generating briefing..." : "Morning Briefing"}</span>
+      <SunriseIcon className={`w-4 h-4 flex-shrink-0 ${loading ? "animate-pulse" : ""}`} />
+      <span>{loading ? "Compounding briefing..." : "Morning Briefing"}</span>
     </button>
   );
 }
