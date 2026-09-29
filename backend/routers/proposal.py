@@ -8,6 +8,7 @@ from fpdf import FPDF
 
 from agents.producer_agent import ProducerAgent
 from auth import get_github_token, get_user_id
+from utils.sse import guard_stream
 from db import postgres as db
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ async def proposal(body: ProposalRequest, request: Request):
 
     logger.info("proposal requested: user=%s client=%s", user_id, body.client)
     return StreamingResponse(
-        _proposal_stream(user_id=user_id, github_token=github_token, body=body),
+        guard_stream(_proposal_stream(user_id=user_id, github_token=github_token, body=body), "Proposal"),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

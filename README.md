@@ -24,6 +24,22 @@ The system routes your question to the right agents, queries the right data sour
 - **Proposal generator** — wizard that drafts a client proposal and exports it as PDF (`POST /proposal`, `GET /proposal/{session_id}/pdf`).
 - **File uploads** — per-project document uploads to S3 via presigned URLs.
 
+### Screenshots
+
+**Chat: each agent step streams in as it runs.**
+
+![Chat with streamed agent trace](docs/screenshots/chat-agent-trace.jpg)
+
+**Morning briefing: deadlines, recent GitHub activity and suggested focus.**
+
+![Morning briefing](docs/screenshots/morning-briefing.jpg)
+
+**Proposal generator: a short form becomes a full client proposal (exportable as PDF).**
+
+![Proposal form](docs/screenshots/proposal-wizard.jpg)
+
+![Generated proposal](docs/screenshots/proposal-output.jpg)
+
 ---
 
 ## Architecture
@@ -80,6 +96,8 @@ The pipeline is a plain async generator (`_stream` in `backend/main.py`) that br
 ### SSE streaming
 
 Each pipeline step yields a Server-Sent Event (`{agent, type, content}`) as it runs: intent classification, milestone query counts, the S3 notes write, GitHub fetches, and the final synthesized response.
+
+Chat, briefing and proposal streams are wrapped in `guard_stream` (`backend/utils/sse.py`): if any step raises (e.g. a bad `OPENAI_API_KEY`), the error is logged server-side and the client gets a `{agent: "system", type: "error"}` event instead of a silently closed stream.
 
 ---
 
@@ -188,6 +206,7 @@ keystone/
 │   │   └── buffer_memory.py     # Per-session chat history backed by Postgres
 │   ├── utils/
 │   │   ├── history.py           # format_history() shared by the agents
+│   │   ├── sse.py               # guard_stream(): turns stream exceptions into an SSE error event
 │   │   └── project_context.py
 │   ├── rag/
 │   │   ├── loader.py            # Document loading for project docs

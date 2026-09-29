@@ -36,6 +36,7 @@ from agents.response_agent import run_response_agent
 from memory.buffer_memory import get_history, save_exchange
 from mcp.servers import filesystem_write
 from graph.workflow import _resolve_repo_url
+from utils.sse import guard_stream
 
 _FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 
@@ -157,7 +158,7 @@ async def chat(req: ChatRequest, request: Request):
     github_token = get_github_token(request)
     session_id = req.session_id or str(uuid.uuid4())
     return StreamingResponse(
-        _stream(req.message, session_id, user_id, github_token),
+        guard_stream(_stream(req.message, session_id, user_id, github_token), "Chat"),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Session-Id": session_id},
     )
